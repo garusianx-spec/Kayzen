@@ -1,0 +1,69 @@
+{
+  "packageId": "app.kayzen.twa",
+  "host": "kayzen.app",
+  "name": "کایزن — برنامه‌ریز روزانه",
+  "launcherName": "کایزن",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#0B0B14",
+  "themeColorDark": "#0B0B14",
+  "navigationColor": "#0B0B14",
+  "navigationColorDark": "#0B0B14",
+  "navigationDividerColor": "#2E284D",
+  "navigationDividerColorDark": "#2E284D",
+  "backgroundColor": "#0B0B14",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://kayzen.app/icons/icon-512.png",
+  "maskableIconUrl": "https://kayzen.app/icons/icon-maskable-512.png",
+  "monochromeIconUrl": "https://kayzen.app/icons/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "android/kayzen.keystore",
+    "alias": "kayzen"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "کار تازه",
+      "shortName": "کار",
+      "url": "/?action=task",
+      "chosenIconUrl": "https://kayzen.app/icons/icon-192.png"
+    },
+    {
+      "name": "اتاق تمرکز",
+      "shortName": "تمرکز",
+      "url": "/focus",
+      "chosenIconUrl": "https://kayzen.app/icons/icon-192.png"
+    },
+    {
+      "name": "عادت‌ها",
+      "shortName": "عادت",
+      "url": "/habits",
+      "chosenIconUrl": "https://kayzen.app/icons/icon-192.png"
+    },
+    {
+      "name": "کتابخانهٔ ۳۶۵",
+      "shortName": "کتاب",
+      "url": "/library",
+      "chosenIconUrl": "https://kayzen.app/icons/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://kayzen.app/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": { "enabled": false },
+    "locationDelegation": { "enabled": false }
+  },
+  "alphaDependencies": { "enabled": false },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://kayzen.app/",
+  "minSdkVersion": 23,
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "appVersion": "1.0.0"
+}

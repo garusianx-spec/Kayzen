@@ -1,0 +1,89 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Vercel production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply database migrations
+        # Runs as the owner role (DIRECT_URL); the app connects as the
+        # NOBYPASSRLS `kayzen_app` role and could not create tables anyway.
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run db:migrate
+
+      - name: Seed the 365 library
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run db:seed
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Verify Digital Asset Links are still served
+        # A deployment that breaks this file puts the URL bar back in the
+        # installed Android app, silently, for every user.
+        run: |
+          set -euo pipefail
+          response=$(curl -fsS "${{ secrets.PRODUCTION_URL }}/.well-known/assetlinks.json")
+          echo "$response"
+          echo "$response" | node -e "
+            let raw = '';
+            process.stdin.on('data', (chunk) => (raw += chunk));
+            process.stdin.on('end', () => {
+              const statements = JSON.parse(raw);
+              const fingerprints = statements?.[0]?.target?.sha256_cert_fingerprints ?? [];
+              if (fingerprints.length === 0) {
+                console.error('assetlinks.json carries no fingerprints — the TWA will show a URL bar');
+                process.exit(1);
+              }
+              console.log('assetlinks.json lists ' + fingerprints.length + ' fingerprint(s)');
+            });
+          "

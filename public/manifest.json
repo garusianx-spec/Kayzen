@@ -1,0 +1,80 @@
+{
+  "id": "/",
+  "name": "کایزن — برنامه‌ریز روزانه",
+  "short_name": "کایزن",
+  "description": "برنامه‌ریز شخصی آفلاین با تقویم جلالی، عادت‌های روزانه، اتاق تمرکز، صندوق پس‌انداز و کتابخانهٔ ۳۶۵ روزه.",
+  "lang": "fa-IR",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0B0B14",
+  "theme_color": "#0B0B14",
+  "categories": ["productivity", "lifestyle", "education"],
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "app.kayzen.twa",
+      "url": "https://play.google.com/store/apps/details?id=app.kayzen.twa"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "کار تازه",
+      "short_name": "کار",
+      "description": "افزودن یک کار به امروز",
+      "url": "/?action=task",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "اتاق تمرکز",
+      "short_name": "تمرکز",
+      "description": "شروع یک جلسهٔ پومودورو",
+      "url": "/focus",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "عادت‌ها",
+      "short_name": "عادت",
+      "description": "ثبت عادت‌های امروز",
+      "url": "/habits",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "کتابخانهٔ ۳۶۵",
+      "short_name": "کتاب",
+      "description": "خلاصهٔ امروز",
+      "url": "/library",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
