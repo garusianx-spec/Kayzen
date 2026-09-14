@@ -1,3 +1,4 @@
+import { toPersianDigits } from '../date/digits';
 import {
   DEFAULT_TIMEZONE,
   addJalaliDays,
@@ -245,7 +246,10 @@ function startOfPreviousJalaliMonth(wallClock: Date): Date {
 export function describeRecurrence(rule: RecurrenceRule): string {
   const weekdayNames = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه'];
   const unit = { DAILY: 'روز', WEEKLY: 'هفته', MONTHLY: 'ماه', YEARLY: 'سال' }[rule.frequency];
-  const prefix = rule.interval === 1 ? `هر ${unit}` : `هر ${rule.interval} ${unit}`;
+  // Every other number the user sees is transliterated; an interval left in
+  // Latin digits reads as a rendering bug on an otherwise Persian row.
+  const prefix =
+    rule.interval === 1 ? `هر ${unit}` : `هر ${toPersianDigits(rule.interval)} ${unit}`;
 
   if (rule.frequency === 'WEEKLY' && rule.byDay?.length) {
     const days = rule.byDay.map((index) => weekdayNames[index] ?? '').filter(Boolean);

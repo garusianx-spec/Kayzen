@@ -160,6 +160,15 @@ export interface NoteDto {
   updatedAt: string;
 }
 
+/** A note attachment, with a short-lived signed URL the client can open. */
+export interface AttachmentDto {
+  /** Object key, `<user>/<note>/<file>`. Opaque to the client. */
+  path: string;
+  url: string;
+  expiresAt: string;
+  filename: string;
+}
+
 export interface BookDto {
   id: string;
   dayNumber: number;

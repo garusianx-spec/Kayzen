@@ -101,7 +101,8 @@ kayzen/
 │   │   ├── api/v1/               # the API surface
 │   │   │   ├── auth/otp/{send,verify}
 │   │   │   ├── auth/{refresh,logout,session}
-│   │   │   ├── tasks · habits · finance · countdowns · notes · library
+│   │   │   ├── tasks · habits · finance · countdowns · library
+│   │   │   ├── notes (+ /notes/[id]/attachments — signed Storage URLs)
 │   │   │   ├── pomodoro · preferences · today · push/subscribe
 │   │   │   └── cron/{streaks,reminders}
 │   │   ├── globals.css           # design tokens, RTL base, Yekan Bakh faces
@@ -125,6 +126,7 @@ kayzen/
 │   │   ├── domain/               # streaks, recurrence, points, library, habits
 │   │   ├── offline/outbox.ts     # IndexedDB mutation queue
 │   │   ├── push/                 # VAPID signing, RFC 8291 encryption
+│   │   ├── storage/              # Supabase Storage: signed URLs, path ownership
 │   │   ├── sms/                  # gateway adapters + WebOTP message template
 │   │   └── validation/schemas.ts # the one definition of every request shape
 │   ├── stores/                   # zustand: ui, pomodoro, audio, preferences
@@ -213,6 +215,34 @@ crossing tenants even on insert.
 The runtime connects as `kayzen_app`, a `NOBYPASSRLS` role that owns nothing;
 migrations use the owner role over `DIRECT_URL`.
 
+## Attachments
+
+Note attachments live in a **private** Supabase Storage bucket. Kayzen does not
+use Supabase Auth, so `auth.uid()` inside Storage is always NULL and a policy
+written against it would deny everything; the bucket therefore has no policies
+at all and the application mediates every access with the service-role key.
+
+That key can read any object in the bucket, which makes one function —
+`assertOwnedObjectPath` — the entire boundary between tenants. Objects are keyed
+`<user-uuid>/<note-uuid>/<random>-<filename>`, so ownership is the first path
+segment and is checked before anything is signed. It has 17 tests, including the
+case a `startsWith` check would wave through (`<user>-evil/...`).
+
+Bytes never pass through the app server:
+
+1. `POST /api/v1/notes/:id/attachments` — note ownership is checked against the
+   RLS-scoped client, and a one-shot signed upload URL comes back;
+2. the browser `PUT`s the file straight to Supabase;
+3. the client records the object key on the note.
+
+Step 3 is separate deliberately: an unused signed URL expires harmlessly,
+whereas recording the attachment first would leave the note pointing at an
+object that never arrived. Downloads are signed in batches with a 15-minute TTL.
+
+Attachments are the one feature that is _not_ offline-capable, which is a limit
+rather than an oversight — a signed URL would expire long before a queued
+upload replayed — so the picker says so instead of failing silently.
+
 ## Offline
 
 - Reads: network-first with a cache fallback, so the Today screen still renders
@@ -254,13 +284,14 @@ bearer secret, same endpoints):
 
 ## Testing
 
-97 unit tests over the parts where a subtle bug is expensive and a browser is
+114 unit tests over the parts where a subtle bug is expensive and a browser is
 not required: Jalali day-boundary maths, Persian digit parsing, the streak
 rules, phone normalisation, OTP hashing and constant-time comparison, the WebOTP
 message format, request schemas, the OTP input's autofill attributes, the
 markdown sanitiser that guards note rendering (script tags, `javascript:` and
-`data:` URLs, event handlers, link hardening), and a full round-trip of the Web
-Push encryption against a decryptor written from RFC 8291.
+`data:` URLs, event handlers, link hardening), attachment path ownership, and a
+full round-trip of the Web Push encryption against a decryptor written from
+RFC 8291.
 
 Playwright covers what unit tests structurally cannot: that the manifest, the
 service worker and the asset links are served correctly by the running server.

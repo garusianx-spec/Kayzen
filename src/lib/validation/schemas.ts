@@ -145,6 +145,35 @@ export const pushSubscriptionSchema = z.object({
 export type PushSubscriptionInput = z.infer<typeof pushSubscriptionSchema>;
 
 // ---------------------------------------------------------------------------
+// Note attachments
+// ---------------------------------------------------------------------------
+
+/**
+ * The browser uploads straight to Supabase Storage, so the server never sees
+ * the bytes — only this description of them. Type and size are re-checked
+ * against the bucket's own limits in `src/lib/storage/supabase.ts`; declaring a
+ * small size here buys an attacker nothing, because the signed URL inherits the
+ * bucket's ceiling.
+ */
+export const signAttachmentSchema = z.object({
+  filename: z.string().trim().min(1, 'نام فایل لازم است.').max(200),
+  contentType: z.string().min(3).max(100),
+  sizeBytes: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(10 * 1024 * 1024),
+});
+
+export const deleteAttachmentSchema = z.object({
+  /** Object key, always `<user>/<note>/<file>`. Ownership is verified server-side. */
+  path: z.string().min(3).max(500),
+});
+
+export type SignAttachmentInput = z.infer<typeof signAttachmentSchema>;
+export type DeleteAttachmentInput = z.infer<typeof deleteAttachmentSchema>;
+
+// ---------------------------------------------------------------------------
 // Tasks
 // ---------------------------------------------------------------------------
 
