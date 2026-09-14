@@ -11,6 +11,7 @@ import { useHapticFeedback } from '@/hooks/use-haptic-feedback';
 import { isQueued } from '@/lib/api/client';
 import { useCreateTask } from '@/lib/api/queries';
 import { formatShortJalaliDate } from '@/lib/date/jalali';
+import { serializeRecurrence, type RecurrenceFrequency } from '@/lib/domain/recurrence';
 import { cn } from '@/lib/utils';
 import { createTaskSchema } from '@/lib/validation/schemas';
 
@@ -29,6 +30,13 @@ const PRIORITIES = [
   { value: 4, label: 'بعداً', className: 'border-border-strong text-content-muted' },
 ] as const;
 
+const REPEATS: Array<{ value: RecurrenceFrequency | 'NONE'; label: string }> = [
+  { value: 'NONE', label: 'بدون تکرار' },
+  { value: 'DAILY', label: 'روزانه' },
+  { value: 'WEEKLY', label: 'هفتگی' },
+  { value: 'MONTHLY', label: 'ماهانه' },
+];
+
 const DIFFICULTIES = [
   { value: 'TRIVIAL', label: 'خیلی ساده' },
   { value: 'EASY', label: 'ساده' },
@@ -43,6 +51,7 @@ export function TaskComposer({ open, onClose }: { open: boolean; onClose(): void
   const [dueAt, setDueAt] = useState<Date | null>(new Date());
   const [priority, setPriority] = useState(3);
   const [difficulty, setDifficulty] = useState<(typeof DIFFICULTIES)[number]['value']>('MEDIUM');
+  const [repeat, setRepeat] = useState<RecurrenceFrequency | 'NONE'>('NONE');
   const [error, setError] = useState<string>();
 
   const createTask = useCreateTask();
@@ -55,6 +64,7 @@ export function TaskComposer({ open, onClose }: { open: boolean; onClose(): void
     setDueAt(new Date());
     setPriority(3);
     setDifficulty('MEDIUM');
+    setRepeat('NONE');
     setError(undefined);
   };
 
@@ -65,6 +75,10 @@ export function TaskComposer({ open, onClose }: { open: boolean; onClose(): void
       dueAt: dueAt ? dueAt.toISOString() : undefined,
       priority,
       difficulty,
+      // Completing a recurring task materialises its next instance server-side
+      // (see /api/v1/tasks/[id]/complete) rather than expanding the series here.
+      recurrence:
+        repeat === 'NONE' ? undefined : serializeRecurrence({ frequency: repeat, interval: 1 }),
       tags: [],
     });
 
@@ -81,6 +95,7 @@ export function TaskComposer({ open, onClose }: { open: boolean; onClose(): void
         dueAt: parsed.data.dueAt?.toISOString(),
         priority: parsed.data.priority,
         difficulty: parsed.data.difficulty,
+        recurrence: parsed.data.recurrence,
         tags: parsed.data.tags,
       });
 
@@ -175,6 +190,30 @@ export function TaskComposer({ open, onClose }: { open: boolean; onClose(): void
                   'kz-pressable rounded-pill border px-4 py-2 text-caption transition-colors',
                   difficulty === option.value
                     ? 'border-violet bg-violet-soft text-violet'
+                    : 'border-border text-content-muted',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <FieldLabel>تکرار</FieldLabel>
+          <div className="flex flex-wrap gap-2">
+            {REPEATS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  haptics.selection();
+                  setRepeat(option.value);
+                }}
+                className={cn(
+                  'kz-pressable rounded-pill border px-4 py-2 text-caption transition-colors',
+                  repeat === option.value
+                    ? 'border-sky bg-sky-soft text-sky'
                     : 'border-border text-content-muted',
                 )}
               >

@@ -2,11 +2,13 @@
 
 import { motion } from 'framer-motion';
 import { Clock, Flag, Repeat } from 'lucide-react';
+import { useMemo } from 'react';
 
 import { TaskCheckbox } from './TaskCheckbox';
 import { useHapticFeedback } from '@/hooks/use-haptic-feedback';
 import { useToggleTask } from '@/lib/api/queries';
 import { formatRelativeJalali } from '@/lib/date/jalali';
+import { describeRecurrence, parseRecurrence } from '@/lib/domain/recurrence';
 import { cn } from '@/lib/utils';
 import type { TaskDto } from '@/types/domain';
 
@@ -15,6 +17,12 @@ export function TaskItem({ task, timezone }: { task: TaskDto; timezone?: string 
   const toggleTask = useToggleTask();
   const haptics = useHapticFeedback();
   const isCompleted = task.status === 'COMPLETED';
+
+  // "هر ۲ هفته، شنبه و دوشنبه" says something; a generic "تکرارشونده" does not.
+  const recurrenceLabel = useMemo(() => {
+    const rule = parseRecurrence(task.recurrence);
+    return rule ? describeRecurrence(rule) : null;
+  }, [task.recurrence]);
 
   const handleToggle = (checked: boolean): void => {
     // The buzz belongs to the tap, so it fires here rather than on the server
@@ -72,10 +80,10 @@ export function TaskItem({ task, timezone }: { task: TaskDto; timezone?: string 
             </span>
           ) : null}
 
-          {task.recurrence ? (
+          {recurrenceLabel ? (
             <span className="inline-flex items-center gap-1">
               <Repeat className="h-3.5 w-3.5" aria-hidden />
-              تکرارشونده
+              {recurrenceLabel}
             </span>
           ) : null}
         </div>

@@ -1,7 +1,15 @@
 'use client';
 
 import { AnimatePresence } from 'framer-motion';
-import { BookOpen, CalendarClock, Settings, Sparkles, Timer } from 'lucide-react';
+import {
+  BookOpen,
+  CalendarClock,
+  ChevronLeft,
+  Settings,
+  Sparkles,
+  StickyNote,
+  Timer,
+} from 'lucide-react';
 import Link from 'next/link';
 
 import { HabitCard } from '@/components/widgets/HabitCard';
@@ -87,7 +95,12 @@ export function TodayScreen() {
 
       {snapshot?.countdowns.length ? (
         <section aria-label="شمارش معکوس‌ها">
-          <h2 className="mb-2 text-title text-content-primary">در راه است</h2>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-title text-content-primary">در راه است</h2>
+            <Link href="/countdowns" className="text-caption text-violet">
+              همه
+            </Link>
+          </div>
           <div className="snap-strip -mx-4 flex gap-3 px-4">
             {snapshot.countdowns.map((countdown) => (
               <article
@@ -169,7 +182,37 @@ export function TodayScreen() {
           </Link>
         </section>
       ) : null}
+
+      {/* Notes and countdowns have no tab of their own — the navigation is five
+          tabs by design — but the FAB writes to both, so they need a way back. */}
+      <nav aria-label="بخش‌های دیگر" className="grid grid-cols-2 gap-3">
+        <QuickLink
+          href="/notes"
+          label="یادداشت‌ها"
+          icon={<StickyNote className="h-4 w-4" aria-hidden />}
+        />
+        <QuickLink
+          href="/countdowns"
+          label="شمارش معکوس"
+          icon={<CalendarClock className="h-4 w-4" aria-hidden />}
+        />
+      </nav>
     </div>
+  );
+}
+
+function QuickLink({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="kz-pressable flex items-center justify-between rounded-card border border-border bg-card p-3 text-body text-content-secondary"
+    >
+      <span className="flex items-center gap-2">
+        {icon}
+        {label}
+      </span>
+      <ChevronLeft className="h-4 w-4 text-content-muted" aria-hidden />
+    </Link>
   );
 }
 

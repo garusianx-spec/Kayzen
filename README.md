@@ -94,7 +94,8 @@ kayzen/
 ├── src/
 │   ├── app/
 │   │   ├── (app)/                # authenticated shell: today, habits, focus,
-│   │   │                         #   finance, library, settings
+│   │   │                         #   finance, library (+ /library/[day] catch-up),
+│   │   │                         #   notes, countdowns, settings
 │   │   ├── (auth)/login/         # phone + OTP sign-in
 │   │   ├── api/assetlinks/       # /.well-known/assetlinks.json (via rewrite)
 │   │   ├── api/v1/               # the API surface
@@ -112,9 +113,9 @@ kayzen/
 │   │   ├── layout/               # AppShell, BottomNav, QuickActionFab, OfflineBanner
 │   │   ├── providers/            # query, theme, app providers
 │   │   ├── pwa/                  # service-worker registrar, install prompt
-│   │   ├── screens/              # one component per tab
+│   │   ├── screens/              # one component per screen
 │   │   ├── ui/                   # button, input, sheet, progress, toast, date picker
-│   │   └── widgets/              # TaskItem, HabitCard, StreakFlame, AmbientPlayer
+│   │   └── widgets/              # TaskItem, HabitCard, StreakFlame, NoteCard, AmbientPlayer
 │   ├── hooks/                    # haptics, WebOTP, countdown, pomodoro, push, audio
 │   ├── lib/
 │   │   ├── api/                  # route composition, DTOs, client, query hooks
@@ -162,6 +163,11 @@ Native-feeling behaviour inside the shell:
   shows them and focuses the running app on tap.
 - **Edge-to-edge** — `viewport-fit=cover` plus `env(safe-area-inset-*)` padding
   on the floating navigation and FAB.
+
+The navigation is five tabs by design — امروز, عادت‌ها, تمرکز, مالی, کتابخانه.
+Notes and countdowns are written from the FAB and read from linked screens
+(`/notes`, `/countdowns`) rather than a sixth tab, because a six-tab bar on a
+phone puts every target under the comfortable thumb width.
 
 ---
 
@@ -248,12 +254,13 @@ bearer secret, same endpoints):
 
 ## Testing
 
-85 unit tests over the parts where a subtle bug is expensive and a browser is
+97 unit tests over the parts where a subtle bug is expensive and a browser is
 not required: Jalali day-boundary maths, Persian digit parsing, the streak
 rules, phone normalisation, OTP hashing and constant-time comparison, the WebOTP
-message format, request schemas, the OTP input's autofill attributes, and a
-full round-trip of the Web Push encryption against a decryptor written from
-RFC 8291.
+message format, request schemas, the OTP input's autofill attributes, the
+markdown sanitiser that guards note rendering (script tags, `javascript:` and
+`data:` URLs, event handlers, link hardening), and a full round-trip of the Web
+Push encryption against a decryptor written from RFC 8291.
 
 Playwright covers what unit tests structurally cannot: that the manifest, the
 service worker and the asset links are served correctly by the running server.

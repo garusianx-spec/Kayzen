@@ -52,17 +52,13 @@ export async function withUserContext<T>(
 }
 
 /**
- * Unscoped access, for the two operations that legitimately have no tenant:
- * Telegram sign-up (the user row does not exist yet) and the nightly cron that
- * reconciles streaks across all tenants.
+ * There is deliberately no `asServiceRole()` helper here.
  *
- * Callers must filter by `user_id` themselves. Keep the surface small — every
- * use is a place where a bug becomes a cross-tenant leak.
+ * Three code paths legitimately run without a tenant context — OTP sign-in,
+ * refresh-token rotation, and the reconciliation cron — and each one imports the
+ * bare `prisma` client directly, next to the RLS policy that permits it
+ * (`supabase/migrations/0002_row_level_security.sql`). A helper with a
+ * reassuring name would make those three call sites look like four hundred
+ * possible ones, and "service role" would be a lie: the runtime connects as
+ * `kayzen_app`, which cannot bypass RLS at all.
  */
-export async function asServiceRole<T>(
-  reason: 'signup' | 'cron' | 'migration',
-  callback: (client: typeof prisma) => Promise<T>,
-): Promise<T> {
-  void reason; // Retained for call-site documentation and log correlation.
-  return callback(prisma);
-}

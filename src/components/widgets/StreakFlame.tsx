@@ -3,7 +3,7 @@
 import { Flame } from 'lucide-react';
 
 import { toPersianDigits } from '@/lib/date/digits';
-import { streakTier, type StreakTier } from '@/lib/domain/streak-engine';
+import { streakLabel, streakTier, type StreakTier } from '@/lib/domain/streak-engine';
 import { cn } from '@/lib/utils';
 
 /**
@@ -42,7 +42,7 @@ export function StreakFlame({
         TIER_STYLE[tier],
         className,
       )}
-      title={streak > 0 ? `${toPersianDigits(streak)} روز پیاپی` : 'هنوز شروع نشده'}
+      title={toPersianDigits(streakLabel(streak))}
     >
       <Flame
         className={cn('h-4 w-4', animate && 'animate-flame-pulse')}

@@ -48,7 +48,3 @@ export function jsonError(
     { status: error.status, headers: responseHeaders },
   );
 }
-
-export function noContent(): NextResponse {
-  return new NextResponse(null, { status: 204 });
-}

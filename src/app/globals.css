@@ -197,6 +197,60 @@
     @apply transition-transform duration-150 active:scale-[0.97];
   }
 
+  /* Rendered note markdown. Tailwind's preflight removes list markers and
+     heading sizes, so the sanitised output needs its own rules — scoped here so
+     nothing user-authored can style the rest of the app. */
+  .prose-kayzen > * + * {
+    @apply mt-3;
+  }
+
+  .prose-kayzen h1,
+  .prose-kayzen h2,
+  .prose-kayzen h3 {
+    @apply text-title text-content-primary;
+  }
+
+  .prose-kayzen ul {
+    @apply list-inside list-disc space-y-1;
+  }
+
+  .prose-kayzen ol {
+    @apply list-inside list-decimal space-y-1;
+  }
+
+  .prose-kayzen a {
+    @apply text-violet underline underline-offset-4;
+  }
+
+  .prose-kayzen blockquote {
+    @apply border-r-2 border-violet/50 pr-3 text-content-muted;
+  }
+
+  .prose-kayzen code {
+    @apply rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-caption;
+    /* Code is Latin and must not be reversed by the surrounding RTL context. */
+    direction: ltr;
+    unicode-bidi: embed;
+  }
+
+  .prose-kayzen pre {
+    @apply overflow-x-auto rounded-card bg-surface-sunken p-3;
+    direction: ltr;
+  }
+
+  .prose-kayzen hr {
+    @apply border-border;
+  }
+
+  .prose-kayzen table {
+    @apply w-full text-caption;
+  }
+
+  .prose-kayzen th,
+  .prose-kayzen td {
+    @apply border border-border px-2 py-1 text-right;
+  }
+
   .kz-skeleton {
     @apply relative overflow-hidden rounded-card bg-surface-raised;
   }

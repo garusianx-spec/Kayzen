@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { unstable_cache } from 'next/cache';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { LibraryReflection } from '@/components/screens/LibraryReflection';
@@ -102,6 +103,27 @@ export default async function LibraryPage() {
           ) : null}
         </div>
       </section>
+
+      {progress.missedDayNumbers.length ? (
+        <section aria-label="روزهای جامانده">
+          <h2 className="mb-2 text-title text-content-primary">جا ماندید؟</h2>
+          <p className="mb-3 text-caption text-content-muted">
+            این روزها هنوز باز هستند؛ هر وقت خواستید سراغشان بروید.
+          </p>
+
+          <div className="snap-strip -mx-4 flex gap-2 px-4">
+            {progress.missedDayNumbers.map((dayNumber) => (
+              <Link
+                key={dayNumber}
+                href={`/library/${dayNumber}`}
+                className="kz-pressable tabular shrink-0 snap-start rounded-card border border-border bg-card px-4 py-3 text-caption text-content-secondary"
+              >
+                روز {toPersianDigits(dayNumber)}
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {book ? (
         <>

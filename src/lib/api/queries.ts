@@ -346,6 +346,70 @@ export function useCreateTransaction() {
 // Countdowns, notes, library
 // ---------------------------------------------------------------------------
 
+export function useUpdateNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...variables }: { id: string } & Record<string, unknown>) =>
+      api.patch<{ note: NoteDto } | QueuedResult>(`/notes/${id}`, variables, {
+        queueWhenOffline: { label: 'ویرایش یادداشت', invalidate: ['notes'] },
+      }),
+
+    onMutate: async ({ id, ...variables }) => {
+      await queryClient.cancelQueries({ queryKey: ['notes'] });
+      const snapshots = queryClient.getQueriesData<NoteDto[]>({ queryKey: ['notes'] });
+
+      // Pinning is the common case and has to feel instant: the row jumps to the
+      // top before the request leaves the device.
+      for (const [key] of snapshots) {
+        queryClient.setQueryData<NoteDto[]>(key, (notes) =>
+          notes
+            ?.map((note) => (note.id === id ? { ...note, ...variables } : note))
+            .sort((left, right) => Number(right.isPinned) - Number(left.isPinned)),
+        );
+      }
+
+      return { snapshots };
+    },
+
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data);
+    },
+
+    onSettled: (data) => {
+      if (isQueued(data)) return;
+      void queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useDeleteNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ id: string }>(`/notes/${id}`),
+
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['notes'] });
+      const snapshots = queryClient.getQueriesData<NoteDto[]>({ queryKey: ['notes'] });
+
+      for (const [key] of snapshots) {
+        queryClient.setQueryData<NoteDto[]>(key, (notes) =>
+          notes?.filter((note) => note.id !== id),
+        );
+      }
+
+      return { snapshots };
+    },
+
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.snapshots ?? []) queryClient.setQueryData(key, data);
+    },
+
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['notes'] }),
+  });
+}
+
 export function useCountdowns() {
   return useQuery({
     queryKey: queryKeys.countdowns,
@@ -364,6 +428,34 @@ export function useCreateCountdown() {
       api.post<{ countdown: CountdownDto } | QueuedResult>('/countdowns', variables, {
         queueWhenOffline: { label: 'شمارش معکوس', invalidate: ['countdowns', 'today'] },
       }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.countdowns });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+    },
+  });
+}
+
+export function useDeleteCountdown() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ id: string }>(`/countdowns/${id}`),
+
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.countdowns });
+      const previous = queryClient.getQueryData<CountdownDto[]>(queryKeys.countdowns);
+
+      queryClient.setQueryData<CountdownDto[]>(queryKeys.countdowns, (events) =>
+        events?.filter((event) => event.id !== id),
+      );
+
+      return { previous };
+    },
+
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKeys.countdowns, context.previous);
+    },
+
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.countdowns });
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });

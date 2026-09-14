@@ -19,12 +19,3 @@ export function formatDuration(totalSeconds: number): string {
 
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
-
-/** Crypto-backed id for optimistic rows that have no server id yet. */
-export function optimisticId(prefix = 'tmp'): string {
-  return `${prefix}_${crypto.randomUUID()}`;
-}
-
-export function isOptimisticId(id: string): boolean {
-  return id.startsWith('tmp_');
-}
