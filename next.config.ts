@@ -1,50 +1,12 @@
 import type { NextConfig } from 'next';
 
 /**
- * Content-Security-Policy.
+ * Static security headers.
  *
- * The app renders inside a Trusted Web Activity — a Chrome Custom Tab with the
- * URL bar removed — so it is a first-party origin with no embedding story at
- * all: `frame-ancestors 'none'` is correct and closes clickjacking outright.
- *
- * `'unsafe-inline'` on styles is required by Next.js's runtime style injection.
- * Scripts stay on `'self'`; the inline bootstrap that applies the stored theme
- * before first paint is allow-listed by its own SHA-256 hash instead (see
- * `src/app/layout.tsx` and `THEME_BOOTSTRAP_HASH`).
+ * The Content-Security-Policy is deliberately *not* here: it needs a fresh
+ * nonce per response so that Next.js can stamp its inline hydration scripts,
+ * which only middleware can produce. See `src/middleware.ts`.
  */
-const THEME_BOOTSTRAP_HASH = "'sha256-TQMTCPYov8Y9/6qiKlHRbwxwnvlfUcGQo149QPsAn7M='";
-
-const CSP_DIRECTIVES: Record<string, string[]> = {
-  'default-src': ["'self'"],
-  'script-src': [
-    "'self'",
-    THEME_BOOTSTRAP_HASH,
-    ...(process.env.NODE_ENV === 'development' ? ["'unsafe-eval'", "'unsafe-inline'"] : []),
-  ],
-  'style-src': ["'self'", "'unsafe-inline'"],
-  'img-src': ["'self'", 'data:', 'blob:', 'https:'],
-  'font-src': ["'self'", 'data:'],
-  'media-src': ["'self'", 'data:', 'blob:'],
-  'worker-src': ["'self'"],
-  'manifest-src': ["'self'"],
-  'connect-src': [
-    "'self'",
-    'https://*.supabase.co',
-    'https://*.upstash.io',
-    'https://*.ingest.sentry.io',
-  ],
-  // A TWA is never framed. Neither is the browser-tab fallback.
-  'frame-ancestors': ["'none'"],
-  'base-uri': ["'self'"],
-  'form-action': ["'self'"],
-  'object-src': ["'none'"],
-  'upgrade-insecure-requests': [],
-};
-
-const contentSecurityPolicy = Object.entries(CSP_DIRECTIVES)
-  .map(([directive, values]) => (values.length ? `${directive} ${values.join(' ')}` : directive))
-  .join('; ');
-
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -75,7 +37,6 @@ const nextConfig: NextConfig = {
       {
         source: '/:path*',
         headers: [
-          { key: 'Content-Security-Policy', value: contentSecurityPolicy },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'X-Frame-Options', value: 'DENY' },
@@ -117,10 +78,6 @@ const nextConfig: NextConfig = {
           { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
           { key: 'Service-Worker-Allowed', value: '/' },
         ],
-      },
-      {
-        source: '/fonts/:path*',
-        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
       },
       {
         source: '/api/:path*',

@@ -1,15 +1,7 @@
 'use client';
 
 import { AnimatePresence } from 'framer-motion';
-import {
-  BookOpen,
-  CalendarClock,
-  ChevronLeft,
-  Settings,
-  Sparkles,
-  StickyNote,
-  Timer,
-} from 'lucide-react';
+import { BookOpen, CalendarClock, ChevronLeft, Sparkles, StickyNote, Timer } from 'lucide-react';
 import Link from 'next/link';
 
 import { HabitCard } from '@/components/widgets/HabitCard';
@@ -43,22 +35,14 @@ export function TodayScreen() {
 
   return (
     <div className="space-y-6 px-4 pt-4">
-      <header className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-caption text-content-muted">{snapshot?.jalaliLabel ?? '—'}</p>
-          <h1 className="text-display text-content-primary">
-            {user?.name ? `سلام ${user.name}` : 'سلام'}
-          </h1>
-          <p className="text-caption text-content-secondary">یک درصد بهتر از دیروز؛ همین امروز.</p>
-        </div>
-
-        <Link
-          href="/settings"
-          aria-label="تنظیمات"
-          className="kz-pressable mt-1 rounded-full border border-border p-2.5 text-content-muted"
-        >
-          <Settings className="h-5 w-5" aria-hidden />
-        </Link>
+      {/* The settings gear moved to the branded AppHeader, which every tab
+          shows; keeping a second one here would be two doors to one room. */}
+      <header className="space-y-1">
+        <p className="text-caption text-muted-foreground">{snapshot?.jalaliLabel ?? '—'}</p>
+        <h1 className="text-display text-foreground">
+          {user?.name ? `سلام ${user.name}` : 'سلام'}
+        </h1>
+        <p className="text-caption text-subtle-foreground">یک درصد بهتر از دیروز؛ همین امروز.</p>
       </header>
 
       <section className="kz-card space-y-3" aria-label="خلاصهٔ امروز">

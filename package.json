@@ -22,6 +22,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "contrast": "node scripts/check-contrast.mjs",
     "icons:generate": "node scripts/generate-icons.mjs",
     "assetlinks:generate": "node scripts/generate-assetlinks.mjs",
     "vapid:generate": "node scripts/generate-vapid-keys.mjs",

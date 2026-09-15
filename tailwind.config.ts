@@ -26,16 +26,26 @@ const config: Config = {
         sans: ['var(--font-yekan-bakh)', 'Yekan Bakh', 'Vazirmatn', 'Tahoma', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
+      // Yekan Bakh ships 400 and 700 only (see src/lib/fonts.ts). The CSS
+      // font-matching algorithm resolves 500 onto 400 and 600/800 onto 700, so
+      // the scale below names the two weights that actually render.
+      fontWeight: {
+        normal: '400',
+        medium: '400',
+        semibold: '700',
+        bold: '700',
+        extrabold: '700',
+      },
       fontSize: {
         // Persian glyphs sit lower than Latin ones; line-heights are padded to match.
         'caption-sm': ['0.6875rem', { lineHeight: '1.25rem', letterSpacing: '0' }],
         caption: ['0.75rem', { lineHeight: '1.5rem' }],
         body: ['0.875rem', { lineHeight: '1.75rem' }],
         'body-lg': ['1rem', { lineHeight: '2rem' }],
-        title: ['1.125rem', { lineHeight: '2rem', fontWeight: '600' }],
+        title: ['1.125rem', { lineHeight: '2rem', fontWeight: '700' }],
         'title-lg': ['1.375rem', { lineHeight: '2.25rem', fontWeight: '700' }],
-        display: ['1.75rem', { lineHeight: '2.5rem', fontWeight: '800' }],
-        'display-lg': ['2.25rem', { lineHeight: '3rem', fontWeight: '800' }],
+        display: ['1.75rem', { lineHeight: '2.5rem', fontWeight: '700' }],
+        'display-lg': ['2.25rem', { lineHeight: '3rem', fontWeight: '700' }],
       },
       colors: {
         surface: {
@@ -78,6 +88,41 @@ const config: Config = {
           soft: 'rgb(var(--kz-sky-soft) / <alpha-value>)',
         },
         ring: 'rgb(var(--kz-ring) / <alpha-value>)',
+
+        /* Semantic names. Prefer these in new code — `bg-background`,
+           `text-foreground`, `text-muted-foreground`, `bg-card`,
+           `bg-primary text-primary-foreground` — so a component never has to
+           know which literal colour a theme resolves to. Defined in
+           `globals.css`; contrast for every pair is asserted by
+           `tests/contrast.test.ts`. */
+        background: 'rgb(var(--background) / <alpha-value>)',
+        foreground: 'rgb(var(--foreground) / <alpha-value>)',
+        popover: 'rgb(var(--popover) / <alpha-value>)',
+        'popover-foreground': 'rgb(var(--popover-foreground) / <alpha-value>)',
+        muted: 'rgb(var(--muted) / <alpha-value>)',
+        'muted-foreground': 'rgb(var(--muted-foreground) / <alpha-value>)',
+        'subtle-foreground': 'rgb(var(--subtle-foreground) / <alpha-value>)',
+        input: 'rgb(var(--input) / <alpha-value>)',
+        primary: {
+          DEFAULT: 'rgb(var(--primary) / <alpha-value>)',
+          foreground: 'rgb(var(--primary-foreground) / <alpha-value>)',
+        },
+        accent: {
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          foreground: 'rgb(var(--accent-foreground) / <alpha-value>)',
+        },
+        success: {
+          DEFAULT: 'rgb(var(--success) / <alpha-value>)',
+          foreground: 'rgb(var(--success-foreground) / <alpha-value>)',
+        },
+        destructive: {
+          DEFAULT: 'rgb(var(--destructive) / <alpha-value>)',
+          foreground: 'rgb(var(--destructive-foreground) / <alpha-value>)',
+        },
+        info: {
+          DEFAULT: 'rgb(var(--info) / <alpha-value>)',
+          foreground: 'rgb(var(--info-foreground) / <alpha-value>)',
+        },
       },
       borderRadius: {
         card: '1.25rem',
@@ -91,8 +136,11 @@ const config: Config = {
         glow: '0 0 0 1px rgb(var(--kz-violet) / 0.35), 0 0 32px -4px rgb(var(--kz-violet) / 0.45)',
       },
       backgroundImage: {
+        /* Built from the fill tokens, not from `--kz-violet`: on the dark theme
+           that ink is #9C88FF, and white on it is 2.0:1. Both stops here clear
+           4.5:1 against white in either theme. */
         'violet-gradient':
-          'linear-gradient(135deg, rgb(var(--kz-violet)) 0%, rgb(var(--kz-violet-deep)) 100%)',
+          'linear-gradient(135deg, rgb(var(--primary-from)) 0%, rgb(var(--primary-to)) 100%)',
         'flame-gradient': 'linear-gradient(135deg, #FBBF24 0%, rgb(var(--kz-flame)) 100%)',
         'radial-glow':
           'radial-gradient(circle at center, rgb(var(--kz-violet) / 0.45) 0%, transparent 70%)',

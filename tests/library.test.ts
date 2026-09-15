@@ -83,10 +83,10 @@ describe('formatCurriculumCaption', () => {
   it('names the day and the cycle', () => {
     expect(
       formatCurriculumCaption({ dayNumber: 24, daysEnrolled: 23, cycle: 0, isNewCycle: false }),
-    ).toBe('روز 24 از 365');
+    ).toBe('روز ۲۴ از ۳۶۵');
     expect(
       formatCurriculumCaption({ dayNumber: 3, daysEnrolled: 368, cycle: 1, isNewCycle: false }),
-    ).toBe('روز 3 از 365 · دور 2');
+    ).toBe('روز ۳ از ۳۶۵ · دور ۲');
   });
 });
 

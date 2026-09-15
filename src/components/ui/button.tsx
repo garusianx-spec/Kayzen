@@ -24,13 +24,17 @@ const buttonVariants = cva(
   'kz-pressable inline-flex min-h-[44px] items-center justify-center gap-2 rounded-pill text-body font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
+      // Fills come from the semantic tokens, whose label contrast is asserted
+      // in `tests/contrast.test.ts`. The previous `bg-rose text-white` was
+      // 3.4:1 on the dark theme — `--kz-rose` is an ink colour, and white does
+      // not sit on it.
       variant: {
-        primary: 'bg-violet-gradient text-white shadow-fab hover:brightness-110',
-        secondary: 'bg-surface-raised text-content-primary hover:bg-surface-raised/80',
-        outline: 'border border-border-strong bg-transparent text-content-primary hover:bg-card',
-        ghost: 'bg-transparent text-content-secondary hover:bg-card hover:text-content-primary',
-        danger: 'bg-rose text-white hover:brightness-110',
-        success: 'bg-emerald text-white hover:brightness-110',
+        primary: 'bg-violet-gradient text-primary-foreground shadow-fab hover:brightness-110',
+        secondary: 'bg-muted text-foreground hover:bg-muted/80',
+        outline: 'border border-border-strong bg-transparent text-foreground hover:bg-card',
+        ghost: 'bg-transparent text-subtle-foreground hover:bg-card hover:text-foreground',
+        danger: 'bg-destructive text-destructive-foreground hover:brightness-110',
+        success: 'bg-success text-success-foreground hover:brightness-110',
       },
       size: {
         sm: 'h-11 px-4 text-caption',

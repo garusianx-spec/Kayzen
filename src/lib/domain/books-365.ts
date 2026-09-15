@@ -1,3 +1,4 @@
+import { toPersianDigits } from '../date/digits';
 import { DEFAULT_TIMEZONE, daysBetweenUtcKeys, toUtcDateKey } from '../date/jalali';
 
 /**
@@ -103,5 +104,5 @@ export function summariseReadingProgress(options: {
 /** `"روز ۲۴ از ۳۶۵"` — the progress caption under the daily card. */
 export function formatCurriculumCaption(position: CurriculumPosition): string {
   const suffix = position.cycle > 0 ? ` · دور ${position.cycle + 1}` : '';
-  return `روز ${position.dayNumber} از ${CURRICULUM_LENGTH}${suffix}`;
+  return toPersianDigits(`روز ${position.dayNumber} از ${CURRICULUM_LENGTH}${suffix}`);
 }

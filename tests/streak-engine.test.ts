@@ -201,7 +201,7 @@ describe('streak presentation', () => {
 
   it('labels the badge in Persian', () => {
     expect(streakLabel(0)).toBe('شروع کن');
-    expect(streakLabel(7)).toBe('7 روز پیاپی');
+    expect(streakLabel(7)).toBe('۷ روز پیاپی');
   });
 });
 

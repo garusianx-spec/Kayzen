@@ -1,3 +1,4 @@
+import { toPersianDigits } from './digits';
 import {
   addDays as addJalaliDays,
   differenceInCalendarDays,
@@ -254,22 +255,37 @@ export function formatFullJalaliDate(instant: Date, timeZone: string = DEFAULT_T
   const weekday = JALALI_WEEKDAYS[jalaliWeekdayIndex(wallClock)] ?? '';
   const month = JALALI_MONTHS[getJalaliMonth(wallClock)] ?? '';
 
-  return `${weekday} ${getJalaliDate(wallClock)} ${month} ${getJalaliYear(wallClock)}`;
+  return toPersianDigits(
+    `${weekday} ${getJalaliDate(wallClock)} ${month} ${getJalaliYear(wallClock)}`,
+  );
 }
 
 /** `"۲۴ شهریور"` — compact form for list rows and chips. */
 export function formatShortJalaliDate(instant: Date, timeZone: string = DEFAULT_TIMEZONE): string {
   const wallClock = toWallClock(instant, timeZone);
-  return `${getJalaliDate(wallClock)} ${JALALI_MONTHS[getJalaliMonth(wallClock)] ?? ''}`;
+  return toPersianDigits(
+    `${getJalaliDate(wallClock)} ${JALALI_MONTHS[getJalaliMonth(wallClock)] ?? ''}`,
+  );
 }
 
 /**
  * Persian relative time: `"۱۱ روز پیش"`, `"فردا"`, `"۳ ساعت دیگر"`.
  *
+ * Digits are transliterated here rather than at each call site: every consumer
+ * is a display surface, and leaving it to the caller meant six of nine sites
+ * rendered `24 شهریور 1405` next to `۰ از ۱` on the same screen.
+ *
  * Day-granularity comparisons run on calendar days rather than elapsed hours, so
  * 23:00 → 01:00 reads as "فردا" and not "۲ ساعت دیگر".
  */
 export function formatRelativeJalali(
+  instant: Date,
+  options: { now?: Date; timeZone?: string; dayStartHour?: number } = {},
+): string {
+  return toPersianDigits(relativeJalaliAscii(instant, options));
+}
+
+function relativeJalaliAscii(
   instant: Date,
   options: { now?: Date; timeZone?: string; dayStartHour?: number } = {},
 ): string {

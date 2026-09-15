@@ -84,8 +84,9 @@ describe('weekday indexing', () => {
 
 describe('formatting', () => {
   it('writes the full Persian date', () => {
+    // Persian digits, because this string is only ever rendered, never parsed.
     expect(formatFullJalaliDate(new Date('2024-09-14T09:00:00Z'), TEHRAN)).toBe(
-      'شنبه 24 شهریور 1403',
+      'شنبه ۲۴ شهریور ۱۴۰۳',
     );
   });
 
@@ -99,7 +100,7 @@ describe('formatting', () => {
       'دیروز',
     );
     expect(formatRelativeJalali(new Date('2024-09-03T09:00:00Z'), { now, timeZone: TEHRAN })).toBe(
-      '11 روز پیش',
+      '۱۱ روز پیش',
     );
   });
 

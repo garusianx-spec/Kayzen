@@ -3,62 +3,6 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
- * Yekan Bakh.
- *
- * The family is commercially licensed, so the binaries are not committed — drop
- * the `.woff2` files into `public/fonts/` (see the README there) and these rules
- * pick them up. Until then `local()` finds a system-installed copy and the
- * fallback stack keeps Persian text rendering correctly; nothing breaks, the
- * type just looks less like Kayzen.
- *
- * `font-display: swap` matters more here than usual: a blocked Persian webfont
- * leaves a screen of invisible text on a slow Iranian mobile connection.
- * ------------------------------------------------------------------------- */
-@font-face {
-  font-family: 'Yekan Bakh';
-  src:
-    local('Yekan Bakh Regular'),
-    local('YekanBakh-Regular'),
-    url('/fonts/YekanBakh-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Yekan Bakh';
-  src:
-    local('Yekan Bakh Medium'),
-    local('YekanBakh-Medium'),
-    url('/fonts/YekanBakh-Medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Yekan Bakh';
-  src:
-    local('Yekan Bakh Bold'),
-    local('YekanBakh-Bold'),
-    url('/fonts/YekanBakh-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Yekan Bakh';
-  src:
-    local('Yekan Bakh ExtraBold'),
-    local('YekanBakh-ExtraBold'),
-    url('/fonts/YekanBakh-ExtraBold.woff2') format('woff2');
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* ---------------------------------------------------------------------------
  * Design tokens.
  *
  * Stored as `R G B` triplets rather than hex so Tailwind's `<alpha-value>`
@@ -66,7 +10,8 @@
  * ------------------------------------------------------------------------- */
 @layer base {
   :root {
-    --font-yekan-bakh: 'Yekan Bakh';
+    /* `--font-yekan-bakh` is injected by next/font/local (src/lib/fonts.ts) as a
+       class on <html>; declaring it here too would shadow the hashed font URLs. */
     --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
 
     /* Dark is the default theme: the app is a night-time planner as much as a
@@ -76,7 +21,7 @@
     --kz-surface-sunken: 7 7 13; /* #07070D */
     --kz-card: 22 20 38; /* #161426 */
     --kz-border: 46 40 77; /* #2E284D */
-    --kz-border-strong: 66 58 105; /* #423A69 */
+    --kz-border-strong: 68 60 107; /* #443C6B — lifted to stay visible on #161426 */
 
     --kz-text-primary: 245 243 255; /* #F5F3FF */
     --kz-text-secondary: 199 195 219; /* #C7C3DB */
@@ -90,10 +35,58 @@
     --kz-emerald: 16 185 129; /* #10B981 */
     --kz-emerald-soft: 10 55 44;
     --kz-rose: 239 68 68; /* #EF4444 */
-    --kz-rose-soft: 63 24 26;
+    --kz-rose-soft: 50 19 21; /* deepened so #EF4444 clears 4.5:1 on it */
     --kz-sky: 56 189 248;
     --kz-sky-soft: 12 46 66;
     --kz-ring: 156 136 255;
+
+    /* The one token that is a paint value rather than an `R G B` triplet: it is
+       written straight into an SVG `stroke`, never composed with an alpha, and
+       `transparent` has no triplet to give. The brand's dark lockup rims the owl
+       in white so a near-black silhouette does not dissolve into a near-black
+       page; the light lockup has no rim, and does not want one. */
+    --kz-logo-keyline: #ffffff;
+
+    /* --- Semantic layer ----------------------------------------------------
+       The vocabulary components should reach for: `bg-background`,
+       `text-foreground`, `text-muted-foreground`, `bg-card`, `border-border`.
+
+       These are aliases, not copies. The `--kz-*` tokens above are the single
+       source of truth and are the only thing a theme restates, so a semantic
+       name can never drift out of step with the palette it names. Only the
+       *-foreground pairs that sit on a saturated fill are declared per theme,
+       because which of black or white reads on violet flips between modes. */
+    --background: var(--kz-surface);
+    --foreground: var(--kz-text-primary);
+    --card: var(--kz-card);
+    --card-foreground: var(--kz-text-primary);
+    --popover: var(--kz-surface-raised);
+    --popover-foreground: var(--kz-text-primary);
+    --muted: var(--kz-surface-raised);
+    --muted-foreground: var(--kz-text-muted);
+    --subtle-foreground: var(--kz-text-secondary);
+    --input: var(--kz-border);
+
+    /* Fills are a different role from ink, and the same hue cannot serve both.
+       `--kz-violet` has to be *light* to read as a link on a #0B0B14 page;
+       a button filled with that light violet cannot then carry white text
+       (2.0:1). So the fills below are fixed at the deep end of each ramp, are
+       identical in both themes, and always carry white — which is why no
+       *-foreground token needs to flip. Measured by
+       `scripts/check-contrast.mjs`; every pair clears 4.5:1. */
+    --primary: 122 54 217; /* #7A36D9 — white on it: 6.26:1 */
+    --primary-from: 122 54 217;
+    --primary-to: 90 33 168; /* #5A21A8 — white on it: 9.47:1 */
+    --accent: 167 92 5; /* 5.03:1 */
+    --success: 4 120 87; /* 5.48:1 */
+    --destructive: 185 28 28; /* 6.47:1 */
+    --info: 2 115 173; /* 5.17:1 */
+
+    --primary-foreground: 255 255 255;
+    --accent-foreground: 255 255 255;
+    --success-foreground: 255 255 255;
+    --destructive-foreground: 255 255 255;
+    --info-foreground: 255 255 255;
 
     color-scheme: dark;
   }
@@ -103,27 +96,32 @@
     --kz-surface-raised: 255 255 255;
     --kz-surface-sunken: 238 236 248;
     --kz-card: 255 255 255; /* #FFFFFF */
-    --kz-border: 226 221 244; /* #E2DDF4 */
-    --kz-border-strong: 200 192 230;
+    --kz-border: 212 208 229; /* #D4D0E5 — perceivable against #F8F7FC */
+    --kz-border-strong: 196 188 225;
 
     --kz-text-primary: 24 19 43; /* #18132B */
     --kz-text-secondary: 72 64 103;
-    --kz-text-muted: 122 114 150;
+    --kz-text-muted: 117 109 144; /* 4.83:1 on the page, 5.2:1 on card */
 
     /* The neon ramp is darkened for light mode: #9C88FF on white fails contrast
        for body text, and a violet the user cannot read is not a brand colour. */
     --kz-violet: 122 54 217;
     --kz-violet-deep: 90 33 168;
     --kz-violet-soft: 237 231 254;
-    --kz-flame: 217 119 6;
+    --kz-flame: 167 92 5; /* 4.5:1 on its own tint and 4.7:1 on the page */
     --kz-flame-soft: 254 243 199;
-    --kz-emerald: 5 150 105;
+    --kz-emerald: 4 125 87;
     --kz-emerald-soft: 209 250 229;
-    --kz-rose: 220 38 38;
+    --kz-rose: 202 35 35;
     --kz-rose-soft: 254 226 226;
-    --kz-sky: 2 132 199;
+    --kz-sky: 2 115 173;
     --kz-sky-soft: 224 242 254;
     --kz-ring: 122 54 217;
+    --kz-logo-keyline: transparent;
+
+    /* No semantic token is restated here: the ink aliases follow the `--kz-*`
+       values above automatically, and the fills are theme-independent by
+       construction. */
 
     color-scheme: light;
   }
@@ -144,6 +142,9 @@
        and loses in-flight state, so vertical overscroll is contained. */
     overscroll-behavior-y: contain;
     text-rendering: optimizeLegibility;
+    /* Before the bold face arrives, a mechanically smeared bold ruins the
+       joins on a connected script; falling back to regular weight is kinder. */
+    font-synthesis-weight: none;
   }
 
   /* The installed app is a native surface: text selection and long-press
