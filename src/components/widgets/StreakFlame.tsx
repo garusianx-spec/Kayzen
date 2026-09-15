@@ -42,7 +42,7 @@ export function StreakFlame({
         TIER_STYLE[tier],
         className,
       )}
-      title={toPersianDigits(streakLabel(streak))}
+      title={streakLabel(streak)}
     >
       <Flame
         className={cn('h-4 w-4', animate && 'animate-flame-pulse')}

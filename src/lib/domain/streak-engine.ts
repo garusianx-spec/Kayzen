@@ -1,3 +1,4 @@
+import { toPersianDigits } from '../date/digits';
 import {
   DEFAULT_TIMEZONE,
   daysBetweenUtcKeys,
@@ -229,7 +230,7 @@ export function streakTier(streak: number): StreakTier {
 /** Persian label for the streak badge tooltip. */
 export function streakLabel(streak: number): string {
   if (streak <= 0) return 'شروع کن';
-  return `${streak} روز پیاپی`;
+  return toPersianDigits(`${streak} روز پیاپی`);
 }
 
 /**

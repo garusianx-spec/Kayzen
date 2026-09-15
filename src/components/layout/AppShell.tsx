@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 
+import { AppHeader } from './AppHeader';
 import { BottomNav } from './BottomNav';
 import { OfflineBanner } from './OfflineBanner';
 import { QuickActionFab } from './QuickActionFab';
@@ -18,7 +19,8 @@ import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="relative mx-auto flex min-h-viewport w-full max-w-md flex-col">
-      <main className="flex-1 pb-nav-offset pt-safe-top">{children}</main>
+      <AppHeader />
+      <main className="flex-1 pb-nav-offset">{children}</main>
 
       <OfflineBanner />
       <InstallPrompt />

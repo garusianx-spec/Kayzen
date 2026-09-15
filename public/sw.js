@@ -111,9 +111,10 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (
+    // Fonts live under /_next/static/media now (next/font/local), so they are
+    // covered by the first prefix rather than needing their own.
     url.pathname.startsWith('/_next/static/') ||
     url.pathname.startsWith('/icons/') ||
-    url.pathname.startsWith('/fonts/') ||
     url.pathname.startsWith('/audio/')
   ) {
     event.respondWith(cacheFirst(request, STATIC_CACHE));

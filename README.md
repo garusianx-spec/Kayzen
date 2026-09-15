@@ -82,12 +82,11 @@ kayzen/
 ├── public/
 │   ├── .well-known/              # generated assetlinks.json (optional static copy)
 │   ├── audio/                    # ambient loops (not committed — see README)
-│   ├── fonts/                    # Yekan Bakh (licensed — see README)
 │   ├── icons/                    # generated PNG icon set, incl. maskable
 │   ├── manifest.json             # Web App Manifest (Play installability)
 │   └── sw.js                     # service worker: cache, outbox replay, push
 ├── scripts/
-│   ├── csp-hash.mjs              # SHA-256 of the inline theme bootstrap
+│   ├── check-contrast.mjs        # WCAG audit of the design tokens
 │   ├── generate-assetlinks.mjs   # static Digital Asset Links
 │   ├── generate-icons.mjs        # draws the icon set (no image dependency)
 │   └── generate-vapid-keys.mjs   # Web Push keys
@@ -110,17 +109,21 @@ kayzen/
 │   │   └── offline/              # service-worker navigation fallback
 │   ├── components/
 │   │   ├── auth/                 # OtpInput, SignInFlow
+│   │   ├── brand/                # KayzenLogo (mark + wordmark, inline SVG)
 │   │   ├── composers/            # the six FAB actions
-│   │   ├── layout/               # AppShell, BottomNav, QuickActionFab, OfflineBanner
+│   │   ├── layout/               # AppShell, AppHeader, BottomNav, QuickActionFab
 │   │   ├── providers/            # query, theme, app providers
 │   │   ├── pwa/                  # service-worker registrar, install prompt
 │   │   ├── screens/              # one component per screen
 │   │   ├── ui/                   # button, input, sheet, progress, toast, date picker
 │   │   └── widgets/              # TaskItem, HabitCard, StreakFlame, NoteCard, AmbientPlayer
 │   ├── hooks/                    # haptics, WebOTP, countdown, pomodoro, push, audio
+│   ├── fonts/                    # Yekan Bakh WOFF2, loaded by next/font/local
+│   ├── middleware.ts             # per-request CSP nonce
 │   ├── lib/
 │   │   ├── api/                  # route composition, DTOs, client, query hooks
 │   │   ├── auth/                 # phone, otp, jwt, session cookies, token rotation
+│   │   ├── fonts.ts              # next/font/local declaration
 │   │   ├── date/                 # Jalali engine, Persian digit formatting
 │   │   ├── db/                   # Prisma singleton, RLS-scoped transactions
 │   │   ├── domain/               # streaks, recurrence, points, library, habits
@@ -215,6 +218,35 @@ crossing tenants even on insert.
 The runtime connects as `kayzen_app`, a `NOBYPASSRLS` role that owns nothing;
 migrations use the owner role over `DIRECT_URL`.
 
+## Brand and theming
+
+The typeface is **Yekan Bakh**, loaded through `next/font/local`
+(`src/lib/fonts.ts`) as WOFF2 — 46 KiB per weight, down from 135 KiB of TTF.
+Self-hosting through `next/font` rather than hand-written `@font-face` buys
+hashed immutable URLs, an automatic preload link, and one CSS variable for the
+Tailwind stack. Only 400 and 700 ship, so the type scale states those two
+weights rather than implying four the family cannot produce.
+
+The mark is drawn as inline SVG (`src/components/brand/KayzenLogo.tsx`) from the
+same three-bar geometry `scripts/generate-icons.mjs` rasterises into the app
+icons, so one definition drives the header, the home screen and the Play
+listing. It inherits the theme through CSS variables instead of needing a
+second file per mode.
+
+Colour is two layers. `--kz-*` holds the palette and is the only thing a theme
+restates; semantic aliases (`--background`, `--foreground`, `--muted-foreground`,
+`--primary`) sit on top and are what components should reach for —
+`bg-background text-foreground`. Because they are aliases rather than copies, a
+semantic name cannot drift from the palette it names.
+
+One distinction is load-bearing: **ink and fill are different roles.**
+`--kz-violet` has to be light to read as a link on a `#0B0B14` page, which means
+a button filled with it cannot carry white text (2.0:1). The fill tokens are
+therefore fixed at the deep end of each ramp, identical in both themes, and
+always carry white. `npm run contrast` measures all 54 pairs; introducing the
+semantic layer surfaced twelve genuine failures, including white-on-rose button
+labels at 3.4:1 and a light-mode border at 1.24:1.
+
 ## Attachments
 
 Note attachments live in a **private** Supabase Storage bucket. Kayzen does not
@@ -284,14 +316,14 @@ bearer secret, same endpoints):
 
 ## Testing
 
-114 unit tests over the parts where a subtle bug is expensive and a browser is
+181 unit tests over the parts where a subtle bug is expensive and a browser is
 not required: Jalali day-boundary maths, Persian digit parsing, the streak
 rules, phone normalisation, OTP hashing and constant-time comparison, the WebOTP
 message format, request schemas, the OTP input's autofill attributes, the
 markdown sanitiser that guards note rendering (script tags, `javascript:` and
-`data:` URLs, event handlers, link hardening), attachment path ownership, and a
-full round-trip of the Web Push encryption against a decryptor written from
-RFC 8291.
+`data:` URLs, event handlers, link hardening), attachment path ownership, WCAG contrast for
+every token pair in both themes, and a full round-trip of the Web Push
+encryption against a decryptor written from RFC 8291.
 
 Playwright covers what unit tests structurally cannot: that the manifest, the
 service worker and the asset links are served correctly by the running server.
@@ -313,8 +345,13 @@ docker run -p 3000:3000 --env-file .env.production kayzen
 ## Contributing notes
 
 - `npm run verify` is what CI runs; run it before pushing.
-- Editing the inline theme bootstrap means regenerating its CSP hash:
-  `node scripts/csp-hash.mjs` → `THEME_BOOTSTRAP_HASH` in `next.config.ts`.
+- The CSP carries a per-request nonce from `src/middleware.ts`; inline scripts
+  need `nonce={nonce}` rather than a hash. Adding _any_ hash to `script-src`
+  makes browsers ignore `'unsafe-inline'`, which silently blocks the inline
+  scripts Next.js streams the RSC payload through — the page renders and then
+  never hydrates.
+- `npm run contrast` audits every token pair against WCAG; `npm test` asserts
+  the same table, so a palette edit cannot quietly drop text below threshold.
 - Adding a library entry: append to `prisma/data/books-365.ts`, `npm run db:seed`.
 - Request shapes live only in `src/lib/validation/schemas.ts`; forms and route
   handlers both import from there so they cannot drift.

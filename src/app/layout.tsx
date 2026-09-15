@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 
 import { AppProviders } from '@/components/providers/AppProviders';
 import { clientEnv } from '@/lib/env';
+import { yekanBakh } from '@/lib/fonts';
 import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme-bootstrap';
 
 import './globals.css';
@@ -76,16 +78,25 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Set by `src/middleware.ts`; the same nonce is on the response CSP, so this
+  // is the one inline script the policy admits.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
-    <html lang="fa" dir="rtl" data-theme="dark" suppressHydrationWarning>
+    <html
+      lang="fa"
+      dir="rtl"
+      data-theme="dark"
+      // `yekanBakh.variable` defines --font-yekan-bakh, which the Tailwind
+      // `fontFamily` stack reads; next/font also injects the preload link.
+      className={yekanBakh.variable}
+      suppressHydrationWarning
+    >
       <head>
-        <script
-          // Allow-listed in the CSP by SHA-256; see `src/lib/theme-bootstrap.ts`.
-          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
-        />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
-      <body className="min-h-viewport bg-surface text-content-primary">
+      <body className="min-h-viewport bg-background text-foreground">
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
