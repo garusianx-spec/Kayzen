@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The build imports the generated Prisma client and evaluates `next.config.ts`,
+  # neither of which talks to a database — but `prisma generate` needs a URL to
+  # parse, and the app needs secrets present to build its route handlers.
+  DATABASE_URL: postgresql://kayzen:kayzen@localhost:5432/kayzen
+  DIRECT_URL: postgresql://kayzen:kayzen@localhost:5432/kayzen
+  AUTH_JWT_SECRET: ci-placeholder-secret-ci-placeholder-secret
+  AUTH_OTP_PEPPER: ci-placeholder-pepper-ci-placeholder-pepper
+  NEXT_PUBLIC_APP_URL: https://kayzen.app
+  SMS_PROVIDER: console
+
+jobs:
+  verify:
+    name: Lint, types and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check the PWA artifacts a TWA depends on
+        # A missing icon or a malformed manifest fails Play's installability
+        # criteria at review time rather than at build time, which is a much
+        # more expensive place to find out.
+        run: |
+          set -euo pipefail
+          node -e "
+            const fs = require('fs');
+            const manifest = JSON.parse(fs.readFileSync('public/manifest.json', 'utf8'));
+
+            const problems = [];
+            if (manifest.display !== 'standalone') problems.push('display must be standalone');
+            if (!manifest.name || !manifest.short_name) problems.push('name and short_name are required');
+            if (!manifest.start_url) problems.push('start_url is required');
+
+            const sizes = new Set(manifest.icons.map((icon) => icon.sizes));
+            if (!sizes.has('192x192') || !sizes.has('512x512')) problems.push('192px and 512px icons are required');
+            if (!manifest.icons.some((icon) => icon.purpose === 'maskable')) problems.push('a maskable icon is required');
+
+            for (const icon of manifest.icons) {
+              const path = 'public' + icon.src;
+              if (!fs.existsSync(path)) problems.push('missing icon file: ' + path);
+            }
+
+            if (problems.length) {
+              console.error('manifest.json does not meet Play installability criteria:');
+              for (const problem of problems) console.error('  - ' + problem);
+              process.exit(1);
+            }
+
+            console.log('manifest.json passes the installability checks');
+          "
+          test -f public/sw.js || { echo 'public/sw.js is missing: no offline support'; exit 1; }
+          node --check public/sw.js

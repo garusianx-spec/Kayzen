@@ -1,0 +1,454 @@
+// Kayzen — data model.
+//
+// Every tenant-owned table carries a `user_id` column that the Postgres RLS
+// policies in `supabase/migrations/0002_row_level_security.sql` match against
+// `app.current_user_id()`. The application never queries those tables outside
+// `withUserContext()` (see `src/lib/db/rls.ts`), which sets that GUC inside the
+// transaction that runs the query.
+//
+// The two pre-authentication tables — `otp_sessions` and `refresh_tokens` — are
+// the documented exception: the caller has no identity yet when they are read.
+// Neither stores a usable secret (both keep digests only).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum ThemePreference {
+  SYSTEM
+  LIGHT
+  DARK
+
+  @@map("theme_preference")
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+
+  @@map("task_status")
+}
+
+enum TaskDifficulty {
+  TRIVIAL
+  EASY
+  MEDIUM
+  HARD
+  EPIC
+
+  @@map("task_difficulty")
+}
+
+enum FinancialBoxCategory {
+  SAVINGS
+  TRAVEL
+  EDUCATION
+  GADGET
+  EMERGENCY
+  DEBT
+  GIFT
+  OTHER
+
+  @@map("financial_box_category")
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+
+  @@map("transaction_type")
+}
+
+enum PomodoroMode {
+  FOCUS
+  SHORT_BREAK
+  LONG_BREAK
+
+  @@map("pomodoro_mode")
+}
+
+enum OtpPurpose {
+  SIGN_IN
+  PHONE_CHANGE
+
+  @@map("otp_purpose")
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id              String          @id @default(uuid()) @db.Uuid
+  /// E.164, always `+98…` for Iranian numbers. The only login identifier.
+  phone           String          @unique @db.VarChar(16)
+  phoneVerifiedAt DateTime?       @map("phone_verified_at") @db.Timestamptz(6)
+  name            String?
+  avatarUrl       String?         @map("avatar_url")
+  languageCode    String          @default("fa") @map("language_code")
+  /// IANA timezone. Drives every "what day is it for this user" calculation.
+  timezone        String          @default("Asia/Tehran")
+  /// Hour (0-23, local) at which the user's day rolls over. Night owls set 4.
+  dayStartHour    Int             @default(0) @map("day_start_hour")
+  theme           ThemePreference @default(DARK)
+  points          Int             @default(0)
+  isPremium       Boolean         @default(false) @map("is_premium")
+  ambientEnabled  Boolean         @default(true) @map("ambient_enabled")
+  hapticsEnabled  Boolean         @default(true) @map("haptics_enabled")
+  notifyAtHour    Int             @default(8) @map("notify_at_hour")
+  notifyAtMinute  Int             @default(0) @map("notify_at_minute")
+  /// Anchors the 365-day curriculum; set on first sign-in.
+  enrolledAt      DateTime        @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  onboardedAt     DateTime?       @map("onboarded_at") @db.Timestamptz(6)
+  lastSeenAt      DateTime?       @map("last_seen_at") @db.Timestamptz(6)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tasks             Task[]
+  habits            Habit[]
+  habitLogs         HabitLog[]
+  financialBoxes    FinancialBox[]
+  transactions      FinancialTransaction[]
+  countdownEvents   CountdownEvent[]
+  notes             Note[]
+  readingLogs       UserReadingLog[]
+  pomodoroSessions  PomodoroSession[]
+  refreshTokens     RefreshToken[]
+  pushSubscriptions PushSubscription[]
+
+  @@index([phone])
+  @@map("users")
+}
+
+/// One in-flight SMS challenge. Rows are single-use and expire in minutes; a
+/// sweep in the nightly cron deletes what verification did not consume.
+model OtpSession {
+  id          String     @id @default(uuid()) @db.Uuid
+  /// E.164 phone the code was sent to. Not a foreign key: a first-time sign-in
+  /// has no user row yet.
+  phone       String     @db.VarChar(16)
+  purpose     OtpPurpose @default(SIGN_IN)
+  /// HMAC-SHA256(pepper, `${phone}:${code}`) — never the code itself.
+  codeHash    String     @map("code_hash") @db.VarChar(64)
+  /// Opaque handle returned to the client so the verify call names one specific
+  /// challenge instead of "the newest code for this number".
+  challengeId String     @unique @map("challenge_id") @db.VarChar(64)
+  attempts    Int        @default(0)
+  /// Set once the attempt budget is spent; blocks verification until it passes.
+  lockedUntil DateTime?  @map("locked_until") @db.Timestamptz(6)
+  expiresAt   DateTime   @map("expires_at") @db.Timestamptz(6)
+  consumedAt  DateTime?  @map("consumed_at") @db.Timestamptz(6)
+  /// SHA-256 of the requesting IP. Enough to correlate abuse, not enough to
+  /// rebuild a browsing history from a database dump.
+  ipHash      String?    @map("ip_hash") @db.VarChar(64)
+  userAgent   String?    @map("user_agent")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([phone, createdAt])
+  @@index([expiresAt])
+  @@map("otp_sessions")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// SHA-256 of the opaque token. The plaintext never touches the database.
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  userAgent String?   @map("user_agent")
+  /// Set when the token is exchanged; a second use of a rotated token is
+  /// treated as theft and revokes the whole family.
+  rotatedAt DateTime? @map("rotated_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+/// A browser push endpoint. One row per installed TWA / browser profile.
+model PushSubscription {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  endpoint  String    @unique
+  /// Base64url P-256 public key of the user agent (RFC 8291 `p256dh`).
+  p256dh    String
+  /// Base64url 16-byte shared authentication secret (RFC 8291 `auth`).
+  auth      String
+  userAgent String?   @map("user_agent")
+  /// Cleared on every successful delivery; a 404/410 from the push service
+  /// deletes the row outright.
+  failedAt  DateTime? @map("failed_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// ---------------------------------------------------------------------------
+// Tasks
+// ---------------------------------------------------------------------------
+
+model Task {
+  id                 String         @id @default(uuid()) @db.Uuid
+  userId             String         @map("user_id") @db.Uuid
+  title              String
+  description        String?
+  /// Absolute instant of the due date, stored in UTC.
+  dueAt              DateTime?      @map("due_at") @db.Timestamptz(6)
+  /// Denormalised Jalali day key ("1403-06-24") in the user's timezone, so the
+  /// "today" query is a plain index lookup instead of a per-row TZ conversion.
+  dueJalali          String?        @map("due_jalali") @db.VarChar(10)
+  /// 1 = critical … 4 = someday. Mirrors the Eisenhower colour ramp in the UI.
+  priority           Int            @default(3)
+  difficulty         TaskDifficulty @default(MEDIUM)
+  status             TaskStatus     @default(PENDING)
+  /// RFC 5545 RRULE subset — see `src/lib/domain/recurrence.ts`.
+  recurrence         String?
+  estimatedPomodoros Int?           @map("estimated_pomodoros")
+  tags               String[]       @default([])
+  position           Int            @default(0)
+  completedAt        DateTime?      @map("completed_at") @db.Timestamptz(6)
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pomodoroSessions PomodoroSession[]
+
+  @@index([userId, dueJalali])
+  @@index([userId, status, priority])
+  @@map("tasks")
+}
+
+// ---------------------------------------------------------------------------
+// Habits
+// ---------------------------------------------------------------------------
+
+model Habit {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  title            String
+  description      String?
+  icon             String    @default("sparkles")
+  colorToken       String    @default("flame") @map("color_token")
+  /// Jalali weekday indices the habit is due on: 0 = شنبه … 6 = جمعه.
+  frequency        Int[]     @default([0, 1, 2, 3, 4, 5, 6])
+  targetPerDay     Int       @default(1) @map("target_per_day")
+  currentStreak    Int       @default(0) @map("current_streak")
+  longestStreak    Int       @default(0) @map("longest_streak")
+  /// Missed days forgiven before the streak breaks ("streak freeze").
+  graceDaysAllowed Int       @default(1) @map("grace_days_allowed")
+  graceDaysUsed    Int       @default(0) @map("grace_days_used")
+  /// Last scheduled day (UTC date key) on which the target was met.
+  lastCompletedOn  DateTime? @map("last_completed_on") @db.Date
+  archivedAt       DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs HabitLog[]
+
+  @@index([userId, archivedAt])
+  @@map("habits")
+}
+
+model HabitLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  habitId   String   @map("habit_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  /// Calendar day in the user's timezone, normalised to a UTC midnight key.
+  logDate   DateTime @map("log_date") @db.Date
+  count     Int      @default(1)
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, logDate])
+  @@index([userId, logDate])
+  @@map("habit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Finance
+// ---------------------------------------------------------------------------
+
+model FinancialBox {
+  id            String               @id @default(uuid()) @db.Uuid
+  userId        String               @map("user_id") @db.Uuid
+  title         String
+  description   String?
+  /// Exact decimal arithmetic: Toman amounts run to ten digits and a float
+  /// would start rounding a savings balance.
+  targetAmount  Decimal              @map("target_amount") @db.Decimal(18, 2)
+  currentAmount Decimal              @default(0) @map("current_amount") @db.Decimal(18, 2)
+  currency      String               @default("IRT") @db.VarChar(3)
+  category      FinancialBoxCategory @default(SAVINGS)
+  colorToken    String               @default("emerald") @map("color_token")
+  icon          String               @default("piggy-bank")
+  deadlineAt    DateTime?            @map("deadline_at") @db.Timestamptz(6)
+  archivedAt    DateTime?            @map("archived_at") @db.Timestamptz(6)
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions FinancialTransaction[]
+
+  @@index([userId, archivedAt])
+  @@map("financial_boxes")
+}
+
+model FinancialTransaction {
+  id         String          @id @default(uuid()) @db.Uuid
+  boxId      String          @map("box_id") @db.Uuid
+  userId     String          @map("user_id") @db.Uuid
+  /// Always positive; direction is carried by `type`.
+  amount     Decimal         @db.Decimal(18, 2)
+  type       TransactionType
+  note       String?
+  occurredAt DateTime        @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  box  FinancialBox @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+  @@index([boxId, occurredAt])
+  @@map("financial_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Countdowns & notes
+// ---------------------------------------------------------------------------
+
+model CountdownEvent {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  title               String
+  description         String?
+  eventAt             DateTime @map("event_at") @db.Timestamptz(6)
+  /// Denormalised Jalali day key of `event_at`, for the timeline grouping.
+  eventJalali         String?  @map("event_jalali") @db.VarChar(10)
+  isAllDay            Boolean  @default(false) @map("is_all_day")
+  colorToken          String   @default("violet") @map("color_token")
+  icon                String   @default("calendar-heart")
+  notifyBeforeMinutes Int[]    @default([1440, 60]) @map("notify_before_minutes")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, eventAt])
+  @@map("countdown_events")
+}
+
+model Note {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  title       String
+  /// Markdown. Sanitised on render, never trusted on read.
+  body        String   @default("")
+  isPinned    Boolean  @default(false) @map("is_pinned")
+  wordCount   Int      @default(0) @map("word_count")
+  colorToken  String   @default("violet") @map("color_token")
+  tags        String[] @default([])
+  /// Supabase Storage object paths; served through short-lived signed URLs.
+  attachments String[] @default([])
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isPinned, updatedAt])
+  @@map("notes")
+}
+
+// ---------------------------------------------------------------------------
+// 365 micro-book library
+// ---------------------------------------------------------------------------
+
+/// Global, read-only curriculum. Not tenant-scoped: RLS grants SELECT to every
+/// scoped session and writes to the migration role only.
+model Book365 {
+  id               String   @id @default(uuid()) @db.Uuid
+  dayNumber        Int      @unique @map("day_number")
+  title            String
+  titleFa          String   @map("title_fa")
+  author           String
+  authorFa         String   @map("author_fa")
+  category         String
+  coverUrl         String?  @map("cover_url")
+  /// Persian micro-summary rendered on the daily card (markdown).
+  summaryFa        String   @map("summary_fa")
+  keyTakeaways     String[] @default([]) @map("key_takeaways")
+  reflectionPrompt String   @map("reflection_prompt")
+  readingMinutes   Int      @default(4) @map("reading_minutes")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  readingLogs UserReadingLog[]
+
+  @@index([dayNumber])
+  @@map("books_365")
+}
+
+model UserReadingLog {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  bookId     String    @map("book_id") @db.Uuid
+  dayNumber  Int       @map("day_number")
+  readAt     DateTime? @map("read_at") @db.Timestamptz(6)
+  /// The user's own micro-reflection, markdown, max 2000 chars.
+  reflection String?
+  highlights String[]  @default([])
+  rating     Int?
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book Book365 @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId])
+  @@index([userId, dayNumber])
+  @@map("user_reading_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Focus
+// ---------------------------------------------------------------------------
+
+model PomodoroSession {
+  id              String       @id @default(uuid()) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  taskId          String?      @map("task_id") @db.Uuid
+  mode            PomodoroMode @default(FOCUS)
+  durationSeconds Int          @map("duration_seconds")
+  startedAt       DateTime     @map("started_at") @db.Timestamptz(6)
+  endedAt         DateTime?    @map("ended_at") @db.Timestamptz(6)
+  completed       Boolean      @default(false)
+  ambientTrack    String?      @map("ambient_track")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, startedAt])
+  @@map("pomodoro_sessions")
+}

@@ -1,0 +1,289 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+ * Yekan Bakh.
+ *
+ * The family is commercially licensed, so the binaries are not committed — drop
+ * the `.woff2` files into `public/fonts/` (see the README there) and these rules
+ * pick them up. Until then `local()` finds a system-installed copy and the
+ * fallback stack keeps Persian text rendering correctly; nothing breaks, the
+ * type just looks less like Kayzen.
+ *
+ * `font-display: swap` matters more here than usual: a blocked Persian webfont
+ * leaves a screen of invisible text on a slow Iranian mobile connection.
+ * ------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Yekan Bakh';
+  src:
+    local('Yekan Bakh Regular'),
+    local('YekanBakh-Regular'),
+    url('/fonts/YekanBakh-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  src:
+    local('Yekan Bakh Medium'),
+    local('YekanBakh-Medium'),
+    url('/fonts/YekanBakh-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  src:
+    local('Yekan Bakh Bold'),
+    local('YekanBakh-Bold'),
+    url('/fonts/YekanBakh-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Yekan Bakh';
+  src:
+    local('Yekan Bakh ExtraBold'),
+    local('YekanBakh-ExtraBold'),
+    url('/fonts/YekanBakh-ExtraBold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------------------
+ * Design tokens.
+ *
+ * Stored as `R G B` triplets rather than hex so Tailwind's `<alpha-value>`
+ * syntax works: `bg-violet/20` resolves to `rgb(156 136 255 / 0.2)`.
+ * ------------------------------------------------------------------------- */
+@layer base {
+  :root {
+    --font-yekan-bakh: 'Yekan Bakh';
+    --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+
+    /* Dark is the default theme: the app is a night-time planner as much as a
+       morning one, and the neon accents only read correctly on a deep surface. */
+    --kz-surface: 11 11 20; /* #0B0B14 */
+    --kz-surface-raised: 26 23 45; /* #1A172D */
+    --kz-surface-sunken: 7 7 13; /* #07070D */
+    --kz-card: 22 20 38; /* #161426 */
+    --kz-border: 46 40 77; /* #2E284D */
+    --kz-border-strong: 66 58 105; /* #423A69 */
+
+    --kz-text-primary: 245 243 255; /* #F5F3FF */
+    --kz-text-secondary: 199 195 219; /* #C7C3DB */
+    --kz-text-muted: 167 163 184; /* #A7A3B8 */
+
+    --kz-violet: 156 136 255; /* #9C88FF */
+    --kz-violet-deep: 122 54 217; /* #7A36D9 */
+    --kz-violet-soft: 45 36 84; /* #2D2454 */
+    --kz-flame: 245 158 11; /* #F59E0B */
+    --kz-flame-soft: 61 43 12;
+    --kz-emerald: 16 185 129; /* #10B981 */
+    --kz-emerald-soft: 10 55 44;
+    --kz-rose: 239 68 68; /* #EF4444 */
+    --kz-rose-soft: 63 24 26;
+    --kz-sky: 56 189 248;
+    --kz-sky-soft: 12 46 66;
+    --kz-ring: 156 136 255;
+
+    color-scheme: dark;
+  }
+
+  [data-theme='light'] {
+    --kz-surface: 248 247 252; /* #F8F7FC */
+    --kz-surface-raised: 255 255 255;
+    --kz-surface-sunken: 238 236 248;
+    --kz-card: 255 255 255; /* #FFFFFF */
+    --kz-border: 226 221 244; /* #E2DDF4 */
+    --kz-border-strong: 200 192 230;
+
+    --kz-text-primary: 24 19 43; /* #18132B */
+    --kz-text-secondary: 72 64 103;
+    --kz-text-muted: 122 114 150;
+
+    /* The neon ramp is darkened for light mode: #9C88FF on white fails contrast
+       for body text, and a violet the user cannot read is not a brand colour. */
+    --kz-violet: 122 54 217;
+    --kz-violet-deep: 90 33 168;
+    --kz-violet-soft: 237 231 254;
+    --kz-flame: 217 119 6;
+    --kz-flame-soft: 254 243 199;
+    --kz-emerald: 5 150 105;
+    --kz-emerald-soft: 209 250 229;
+    --kz-rose: 220 38 38;
+    --kz-rose-soft: 254 226 226;
+    --kz-sky: 2 132 199;
+    --kz-sky-soft: 224 242 254;
+    --kz-ring: 122 54 217;
+
+    color-scheme: light;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* Persian numerals inside otherwise-Latin strings still need a Persian
+       shaping context; `dir` is set on <html> in the layout. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-surface font-yekan-bakh text-body text-content-primary antialiased;
+    /* Pull-to-refresh inside a standalone Android shell reloads the whole app
+       and loses in-flight state, so vertical overscroll is contained. */
+    overscroll-behavior-y: contain;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* The installed app is a native surface: text selection and long-press
+     callouts on chrome elements read as a bug there, not a feature. */
+  @media (display-mode: standalone) {
+    body {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    input,
+    textarea,
+    [contenteditable='true'],
+    [data-selectable='true'] {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-surface;
+  }
+
+  /* Chrome's autofill repaints inputs white, which is unreadable on #0B0B14. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--kz-text-primary));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--kz-card)) inset;
+    caret-color: rgb(var(--kz-text-primary));
+  }
+
+  /* Numeric readouts (timer, OTP, amounts) must not shift width per digit. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+}
+
+@layer components {
+  .kz-card {
+    @apply rounded-card border border-border bg-card p-4 shadow-card;
+  }
+
+  .kz-frosted {
+    @apply border border-border/70 bg-card/70 backdrop-blur-md;
+    /* Safari needs the prefix, and without it the nav bar is opaque. */
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .kz-pressable {
+    @apply transition-transform duration-150 active:scale-[0.97];
+  }
+
+  /* Rendered note markdown. Tailwind's preflight removes list markers and
+     heading sizes, so the sanitised output needs its own rules — scoped here so
+     nothing user-authored can style the rest of the app. */
+  .prose-kayzen > * + * {
+    @apply mt-3;
+  }
+
+  .prose-kayzen h1,
+  .prose-kayzen h2,
+  .prose-kayzen h3 {
+    @apply text-title text-content-primary;
+  }
+
+  .prose-kayzen ul {
+    @apply list-inside list-disc space-y-1;
+  }
+
+  .prose-kayzen ol {
+    @apply list-inside list-decimal space-y-1;
+  }
+
+  .prose-kayzen a {
+    @apply text-violet underline underline-offset-4;
+  }
+
+  .prose-kayzen blockquote {
+    @apply border-r-2 border-violet/50 pr-3 text-content-muted;
+  }
+
+  .prose-kayzen code {
+    @apply rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-caption;
+    /* Code is Latin and must not be reversed by the surrounding RTL context. */
+    direction: ltr;
+    unicode-bidi: embed;
+  }
+
+  .prose-kayzen pre {
+    @apply overflow-x-auto rounded-card bg-surface-sunken p-3;
+    direction: ltr;
+  }
+
+  .prose-kayzen hr {
+    @apply border-border;
+  }
+
+  .prose-kayzen table {
+    @apply w-full text-caption;
+  }
+
+  .prose-kayzen th,
+  .prose-kayzen td {
+    @apply border border-border px-2 py-1 text-right;
+  }
+
+  .kz-skeleton {
+    @apply relative overflow-hidden rounded-card bg-surface-raised;
+  }
+
+  .kz-skeleton::after {
+    @apply absolute inset-0 animate-shimmer bg-gradient-to-l from-transparent via-white/5 to-transparent content-[''];
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Horizontal strips (the Jalali date rail, ambient chips) snap in RTL. */
+  .snap-strip {
+    @apply scrollbar-none snap-x snap-mandatory scroll-px-4 overflow-x-auto;
+  }
+}
+
+/* Motion is decoration; the OS setting wins over every animation in the app. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
