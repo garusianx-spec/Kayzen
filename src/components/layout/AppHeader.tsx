@@ -38,10 +38,10 @@ export function AppHeader() {
           aria-label="کایزن — رفتن به امروز"
         >
           {isHome ? (
-            <KayzenLogo variant="full" size={26} label={null} />
+            <KayzenLogo variant="full" size={32} label={null} className="text-foreground" />
           ) : (
             <>
-              <KayzenLogo variant="mark" size={24} label={null} />
+              <KayzenLogo variant="mark" size={28} label={null} />
               <span className="truncate text-title text-foreground">{section?.label}</span>
             </>
           )}

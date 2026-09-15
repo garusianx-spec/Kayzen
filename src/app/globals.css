@@ -40,6 +40,13 @@
     --kz-sky-soft: 12 46 66;
     --kz-ring: 156 136 255;
 
+    /* The one token that is a paint value rather than an `R G B` triplet: it is
+       written straight into an SVG `stroke`, never composed with an alpha, and
+       `transparent` has no triplet to give. The brand's dark lockup rims the owl
+       in white so a near-black silhouette does not dissolve into a near-black
+       page; the light lockup has no rim, and does not want one. */
+    --kz-logo-keyline: #ffffff;
+
     /* --- Semantic layer ----------------------------------------------------
        The vocabulary components should reach for: `bg-background`,
        `text-foreground`, `text-muted-foreground`, `bg-card`, `border-border`.
@@ -110,6 +117,7 @@
     --kz-sky: 2 115 173;
     --kz-sky-soft: 224 242 254;
     --kz-ring: 122 54 217;
+    --kz-logo-keyline: transparent;
 
     /* No semantic token is restated here: the ink aliases follow the `--kz-*`
        values above automatically, and the fills are theme-independent by
