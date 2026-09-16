@@ -18,8 +18,12 @@ const serverSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
-    DATABASE_URL: nonEmpty('DATABASE_URL').url(),
+    // Optional only outside production, where an absent value selects the
+    // in-memory database — see `usesMemoryDatabase`. The superRefine below
+    // makes it required again for a real deployment.
+    DATABASE_URL: nonEmpty('DATABASE_URL').url().optional(),
     DIRECT_URL: z.string().url().optional(),
+    DEV_DATABASE: z.enum(['memory', 'postgres']).optional(),
 
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     SUPABASE_STORAGE_BUCKET: z.string().default('kayzen-attachments'),
@@ -81,6 +85,14 @@ const serverSchema = z
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV !== 'production' && env.DEV_DATABASE === 'postgres' && !env.DATABASE_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DATABASE_URL'],
+        message: 'DATABASE_URL is required when DEV_DATABASE=postgres',
+      });
+    }
+
     // A code that does not match the length the client asks for can never be
     // typed in, so it would look like "the fixed code does not work" rather
     // than like a misconfiguration. Checked in every environment.
@@ -93,6 +105,24 @@ const serverSchema = z
     }
 
     if (env.NODE_ENV !== 'production') return;
+
+    if (!env.DATABASE_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DATABASE_URL'],
+        message: 'DATABASE_URL is required in production',
+      });
+    }
+
+    // The in-memory database holds one process's worth of rows and forgets them
+    // on restart. There is no version of that which is a production database.
+    if (env.DEV_DATABASE === 'memory') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['DEV_DATABASE'],
+        message: 'DEV_DATABASE=memory must not be used in production',
+      });
+    }
 
     // A production deployment with a fixed code has no authentication at all.
     if (env.AUTH_DEV_OTP_CODE) {
@@ -297,6 +327,31 @@ export function androidEnv(): { packageName: string; fingerprints: string[] } {
       // published.
       .filter((fingerprint) => /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(fingerprint)),
   };
+}
+
+/**
+ * Whether this process should use the in-memory database instead of Postgres.
+ *
+ * Read from raw values rather than from `serverEnv()` so that the decision is
+ * available before — and independently of — a successful parse: `prisma.ts`
+ * runs at import time, and an import that can throw on a misconfigured
+ * environment takes the whole build down rather than one request.
+ *
+ * The rule, in order:
+ *
+ *   1. Never in production.
+ *   2. `DEV_DATABASE` decides, when set.
+ *   3. Otherwise: no `DATABASE_URL` means no Postgres to connect to, so the
+ *      in-memory store takes over. Deleting the line is the whole setup.
+ */
+export function usesMemoryDatabase(
+  source: { NODE_ENV?: string; DEV_DATABASE?: string; DATABASE_URL?: string } = process.env,
+): boolean {
+  if (source.NODE_ENV === 'production') return false;
+  if (source.DEV_DATABASE === 'memory') return true;
+  if (source.DEV_DATABASE === 'postgres') return false;
+
+  return !source.DATABASE_URL?.trim();
 }
 
 /** SHA-256 certificate fingerprints permitted to open the TWA without chrome. */

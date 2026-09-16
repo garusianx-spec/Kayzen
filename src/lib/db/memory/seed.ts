@@ -1,0 +1,170 @@
+import { BOOKS_365 } from '../../../../prisma/data/books-365';
+import { hashPassword } from '../../auth/password';
+import type { MemoryStore } from './engine';
+
+/**
+ * What the in-memory database starts with.
+ *
+ * Two jobs. The first is the 365-library, which is global reference data the
+ * real deployment loads with `npm run db:seed`; without it the library screens
+ * render an error rather than a day. The second is one demo account with enough
+ * belonging to it that the home screen has something to lay out — an empty
+ * account is a poor thing to design against, and "is this screen broken or just
+ * empty?" is a question worth never having to ask.
+ *
+ * Nothing here is a fixture in the test sense. It is the state a developer opens
+ * the app into.
+ */
+
+export const DEMO_PHONE = '+989123456789';
+export const DEMO_PASSWORD = 'kayzen-dev';
+export const DEMO_OTP_HINT = 'any code, when AUTH_DEV_OTP_CODE is set';
+
+function at(base: Date, days: number, hour = 9): Date {
+  const date = new Date(base);
+  date.setDate(date.getDate() + days);
+  date.setHours(hour, 0, 0, 0);
+  return date;
+}
+
+/**
+ * Hours from now, clamped to today.
+ *
+ * Today's tasks are placed relative to the clock rather than at a fixed hour,
+ * so starting the server in the evening does not open the app onto a list that
+ * is already overdue.
+ */
+function soon(base: Date, hours: number): Date {
+  const date = new Date(base.getTime() + hours * 3_600_000);
+  const endOfDay = new Date(base);
+  endOfDay.setHours(23, 30, 0, 0);
+
+  return date > endOfDay ? endOfDay : date;
+}
+
+export async function seedMemoryStore(store: MemoryStore): Promise<{ userId: string }> {
+  const now = new Date();
+
+  for (const book of BOOKS_365) {
+    store.create('Book365', {
+      data: {
+        dayNumber: book.dayNumber,
+        title: book.title,
+        titleFa: book.titleFa,
+        author: book.author,
+        authorFa: book.authorFa,
+        category: book.category,
+        summaryFa: book.summaryFa,
+        keyTakeaways: [...book.keyTakeaways],
+        reflectionPrompt: book.reflectionPrompt,
+        readingMinutes: book.readingMinutes,
+      },
+    });
+  }
+
+  const user = store.create('User', {
+    data: {
+      phone: DEMO_PHONE,
+      name: 'کاربر آزمایشی',
+      phoneVerifiedAt: now,
+      passwordHash: await hashPassword(DEMO_PASSWORD),
+      passwordUpdatedAt: now,
+      points: 120,
+      // Backdated so the library is a few days in and the streak has history.
+      enrolledAt: at(now, -6),
+      lastSeenAt: now,
+      onboardedAt: at(now, -6),
+    },
+  });
+
+  const userId = user.id as string;
+
+  const habits = [
+    { title: 'مطالعهٔ روزانه', icon: '📖', colorToken: 'violet' },
+    { title: 'پیاده‌روی', icon: '🚶', colorToken: 'emerald' },
+    { title: 'نوشیدن آب', icon: '💧', colorToken: 'sky' },
+  ];
+
+  for (const [index, habit] of habits.entries()) {
+    const created = store.create('Habit', {
+      data: {
+        userId,
+        title: habit.title,
+        icon: habit.icon,
+        colorToken: habit.colorToken,
+        currentStreak: index === 2 ? 1 : 4,
+        longestStreak: index === 2 ? 3 : 6,
+        lastCompletedOn: at(now, -1),
+        createdAt: at(now, -6),
+      },
+    });
+
+    // A partial history, so the streak engine has something real to compute
+    // rather than a flat zero. The third habit skips a day on purpose: a broken
+    // streak is a state the UI has to render too.
+    for (let back = 1; back <= 4; back += 1) {
+      if (index === 2 && back === 2) continue;
+
+      store.create('HabitLog', {
+        data: {
+          userId,
+          habitId: created.id,
+          logDate: at(now, -back, 0),
+          count: 1,
+        },
+      });
+    }
+  }
+
+  const tasks = [
+    { title: 'بازبینی طرح صفحهٔ ورود', difficulty: 'MEDIUM', dueAt: soon(now, 3) },
+    { title: 'تمرین زبان — ۲۰ دقیقه', difficulty: 'EASY', dueAt: soon(now, 5) },
+    { title: 'خرید هفتگی', difficulty: 'TRIVIAL', dueAt: at(now, 1, 11) },
+    { title: 'پاسخ به ایمیل‌ها', difficulty: 'EASY', dueAt: at(now, -1, 16) },
+  ];
+
+  for (const [index, task] of tasks.entries()) {
+    store.create('Task', {
+      data: {
+        userId,
+        title: task.title,
+        difficulty: task.difficulty,
+        dueAt: task.dueAt,
+        position: index,
+        // One already done, so the list has both states on first paint.
+        ...(index === 3 ? { status: 'COMPLETED', completedAt: at(now, -1, 17) } : {}),
+      },
+    });
+  }
+
+  store.create('FinancialBox', {
+    data: {
+      userId,
+      title: 'سفر تابستان',
+      icon: '✈️',
+      category: 'TRAVEL',
+      targetAmount: 50_000_000,
+      currentAmount: 12_500_000,
+    },
+  });
+
+  store.create('CountdownEvent', {
+    data: {
+      userId,
+      title: 'نوروز',
+      icon: '🌱',
+      eventAt: at(now, 45, 0),
+    },
+  });
+
+  store.create('Note', {
+    data: {
+      userId,
+      title: 'ایده‌های محصول',
+      body: 'یادداشت نمونه برای توسعهٔ محلی.\n\n- مورد اول\n- مورد دوم',
+      isPinned: true,
+    },
+  });
+
+  return { userId };
+}
