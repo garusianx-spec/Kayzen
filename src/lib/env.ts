@@ -40,6 +40,16 @@ const serverSchema = z
     AUTH_OTP_RESEND_SECONDS: z.coerce.number().int().min(30).max(600).default(120),
     AUTH_OTP_DAILY_SEND_LIMIT: z.coerce.number().int().min(1).max(50).default(5),
 
+    // Local development only: makes `issueOtpChallenge` mint this code instead
+    // of a random one, so signing in does not mean reading the server log. It
+    // changes nothing else — the code is still hashed, still bound to the
+    // phone, still single-use, and still expires — so the verification path
+    // under test is the real one. Refused outright in production below.
+    AUTH_DEV_OTP_CODE: z
+      .string()
+      .regex(/^[0-9]+$/, 'AUTH_DEV_OTP_CODE must be digits only')
+      .optional(),
+
     SMS_PROVIDER: z.enum(SMS_PROVIDERS).default('console'),
     KAVENEGAR_API_KEY: z.string().optional(),
     KAVENEGAR_TEMPLATE: z.string().default('kayzen-otp'),
@@ -68,7 +78,27 @@ const serverSchema = z
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((env, ctx) => {
+    // A code that does not match the length the client asks for can never be
+    // typed in, so it would look like "the fixed code does not work" rather
+    // than like a misconfiguration. Checked in every environment.
+    if (env.AUTH_DEV_OTP_CODE && env.AUTH_DEV_OTP_CODE.length !== env.AUTH_OTP_LENGTH) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AUTH_DEV_OTP_CODE'],
+        message: `AUTH_DEV_OTP_CODE must be exactly AUTH_OTP_LENGTH (${env.AUTH_OTP_LENGTH}) digits`,
+      });
+    }
+
     if (env.NODE_ENV !== 'production') return;
+
+    // A production deployment with a fixed code has no authentication at all.
+    if (env.AUTH_DEV_OTP_CODE) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AUTH_DEV_OTP_CODE'],
+        message: 'AUTH_DEV_OTP_CODE must not be set in production',
+      });
+    }
 
     // A production deployment that "sends" OTP codes to stdout would hand every
     // account to anyone who can read a log line.

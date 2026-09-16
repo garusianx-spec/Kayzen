@@ -2,7 +2,7 @@ import type { OtpPurpose } from '@prisma/client';
 
 import { constantTimeEqual, hmacSha256Hex, randomDigits, randomToken, sha256Hex } from '../crypto';
 import { prisma } from '../db/prisma';
-import { serverEnv } from '../env';
+import { serverEnv, type ServerEnv } from '../env';
 
 /**
  * SMS one-time-password engine.
@@ -42,6 +42,25 @@ export interface IssuedChallenge {
   expiresAt: Date;
   /** Seconds the client must wait before a resend is accepted. */
   resendAfterSeconds: number;
+}
+
+/**
+ * The fixed code local development may pin, or `null` for a random one.
+ *
+ * This is the whole of the development shortcut, and it deliberately sits at the
+ * point where the code is *minted* rather than where it is checked. Verification
+ * keeps no bypass branch at all: the fixed code is hashed, stored, bound to the
+ * phone, counted against the attempt limit, expired and consumed exactly like
+ * any other, so what a developer exercises locally is the real path.
+ *
+ * `serverEnv()` already refuses `AUTH_DEV_OTP_CODE` in production, which means
+ * a production deployment cannot start with one set. The second check here is
+ * belt and braces: it makes the guarantee local to the function that would
+ * otherwise hand out a known code.
+ */
+export function fixedDevOtpCode(env: ServerEnv): string | null {
+  if (env.NODE_ENV === 'production') return null;
+  return env.AUTH_DEV_OTP_CODE ?? null;
 }
 
 /** `HMAC-SHA256(AUTH_OTP_PEPPER, "<phone>:<code>")`, hex encoded. */
@@ -85,6 +104,9 @@ export async function dailySendCount(phone: string): Promise<number> {
  * Any live challenge for the same number is consumed first: a user who asks for
  * a second code expects the first to stop working, and the partial unique index
  * `otp_sessions_one_live_per_phone` enforces it at the storage layer too.
+ *
+ * Outside production the code may be pinned by `AUTH_DEV_OTP_CODE` — see
+ * `fixedDevOtpCode`. Everything after this line is identical either way.
  */
 export async function issueOtpChallenge(options: {
   phone: string;
@@ -95,7 +117,7 @@ export async function issueOtpChallenge(options: {
   const env = serverEnv();
   const { phone, purpose = 'SIGN_IN' } = options;
 
-  const code = randomDigits(env.AUTH_OTP_LENGTH);
+  const code = fixedDevOtpCode(env) ?? randomDigits(env.AUTH_OTP_LENGTH);
   const codeHash = await hashOtpCode(phone, code);
   const challengeId = randomToken(24);
   const expiresAt = new Date(Date.now() + env.AUTH_OTP_TTL_SECONDS * 1000);

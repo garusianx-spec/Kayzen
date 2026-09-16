@@ -94,7 +94,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       suppressHydrationWarning
     >
       <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        {/* `suppressHydrationWarning` because the mismatch is guaranteed and
+            benign: browsers blank the `nonce` content attribute once the
+            document is parsed, so React sees `nonce=""` on the client against
+            the real value it server-rendered. Without this, every page logs a
+            hydration error and the dev overlay shows a permanent error badge —
+            which, on this app, sits over the sign-in screen. */}
+        <script
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
+        />
       </head>
       <body className="min-h-viewport bg-background text-foreground">
         <AppProviders>{children}</AppProviders>

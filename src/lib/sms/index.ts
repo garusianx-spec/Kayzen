@@ -30,8 +30,10 @@ export function smsProvider(): SmsProvider {
  * Renders and dispatches one verification code.
  *
  * The plaintext code is passed in, used, and dropped: it is never returned to
- * the caller, never logged, and never written to the database — only its HMAC
- * digest is persisted (see `src/lib/auth/otp.ts`).
+ * the caller, never logged here, and never written to the database — only its
+ * HMAC digest is persisted (see `src/lib/auth/otp.ts`). The one exception is the
+ * `console` provider, whose entire job is to print it, and which `serverEnv()`
+ * refuses to start in production for exactly that reason.
  */
 export async function sendOtpSms(options: {
   to: string;
