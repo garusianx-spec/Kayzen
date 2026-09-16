@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db/prisma';
 import { clientEnv, serverEnv } from '@/lib/env';
 import { ApiError } from '@/lib/errors';
 import { checkRateLimit, clientIp } from '@/lib/ratelimit';
-import { sendOtpSms, SmsDeliveryError, webOtpDomain } from '@/lib/sms';
+import { sendOtpSms, smsProvider, SmsDeliveryError, webOtpDomain } from '@/lib/sms';
 import { sendOtpSchema, type SendOtpInput } from '@/lib/validation/schemas';
 
 /**
@@ -24,6 +24,14 @@ import { sendOtpSchema, type SendOtpInput } from '@/lib/validation/schemas';
  *   4. a database-side cooldown check, which still holds when Redis is down —
  *      the Redis limiter fails open so an outage cannot take sign-in down, and
  *      this is what stops that from becoming an SMS flood.
+ *
+ * Failures that are the *server's* fault rather than the request's do not come
+ * back as an opaque 500 here. A variable missing from the environment and a
+ * database that is not running are both recognised by `withRoute()` and
+ * answered with a 503 that names what is wrong — in development, in the
+ * response body itself. Locally there is usually nothing to name: the two
+ * secrets fall back to throwaway development values, and a gateway without
+ * credentials falls back to the console sink, which prints the code.
  */
 
 export const runtime = 'nodejs';
@@ -41,7 +49,7 @@ interface SendOtpResponse {
 
 export const POST = withRoute<SendOtpInput, undefined, SendOtpResponse>({
   bodySchema: sendOtpSchema,
-  handler: async ({ request, body }) => {
+  handler: async ({ request, body, log }) => {
     const env = serverEnv();
     const { phone } = body;
     const ip = clientIp(request);
@@ -96,6 +104,19 @@ export const POST = withRoute<SendOtpInput, undefined, SendOtpResponse>({
         where: { challengeId: challenge.challengeId, consumedAt: null },
         data: { consumedAt: new Date() },
       });
+
+      // The client is told only that delivery failed, so this is the one record
+      // of *why*. Without it, a wrong gateway credential and an unreachable
+      // gateway are the same 503 with nothing to tell them apart.
+      log.error(
+        {
+          err: error,
+          provider: error instanceof SmsDeliveryError ? error.providerId : smsProvider().id,
+          retryable: error instanceof SmsDeliveryError ? error.retryable : undefined,
+          to: maskPhone(phone),
+        },
+        'otp sms delivery failed',
+      );
 
       if (error instanceof SmsDeliveryError && !error.retryable) {
         throw ApiError.unprocessable('ارسال پیامک به این شماره ممکن نیست.', {

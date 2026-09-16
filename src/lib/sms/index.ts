@@ -1,4 +1,10 @@
-import { clientEnv, serverEnv, type SmsProviderId } from '../env';
+import {
+  clientEnv,
+  isProduction,
+  missingSmsCredentials,
+  serverEnv,
+  type SmsProviderId,
+} from '../env';
 import { logger } from '../logger';
 import { maskPhone } from '../auth/phone';
 import { consoleSmsProvider } from './providers/console';
@@ -22,8 +28,33 @@ const PROVIDERS: Record<SmsProviderId, SmsProvider> = {
   twilio: twilioSmsProvider,
 };
 
+/** Warned about once per process, not once per sign-in attempt. */
+let warnedAboutFallback = false;
+
+/**
+ * The active gateway, or the console sink when the configured one cannot send.
+ *
+ * Naming a gateway without holding credentials for it is a startup failure in
+ * production — `serverEnv()` refuses to parse. Everywhere else it falls back to
+ * printing the code, because the alternative is a `SmsDeliveryError` that the
+ * route turns into "ارسال پیامک به این شماره ممکن نیست": a message that blames
+ * the user's phone number for an empty `.env.local`.
+ */
 export function smsProvider(): SmsProvider {
-  return PROVIDERS[serverEnv().SMS_PROVIDER];
+  const env = serverEnv();
+  const missing = missingSmsCredentials(env);
+
+  if (missing.length === 0) return PROVIDERS[env.SMS_PROVIDER];
+
+  if (!warnedAboutFallback) {
+    warnedAboutFallback = true;
+    logger.warn(
+      { provider: env.SMS_PROVIDER, missing },
+      'SMS credentials are missing; falling back to the console provider',
+    );
+  }
+
+  return consoleSmsProvider;
 }
 
 /**
@@ -48,6 +79,11 @@ export async function sendOtpSms(options: {
     ttlSeconds: options.ttlSeconds,
     appUrl: clientEnv.appUrl,
   });
+
+  // The fallback above must never be able to reach a real deployment.
+  if (isProduction && provider.id === 'console') {
+    throw new Error('the console SMS provider must not be used in production');
+  }
 
   const result = await provider.send({
     to: options.to,

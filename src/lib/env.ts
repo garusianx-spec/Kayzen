@@ -110,54 +110,131 @@ const serverSchema = z
       });
     }
 
-    const credentials: Record<Exclude<SmsProviderId, 'console'>, Array<[string, unknown]>> = {
-      kavenegar: [['KAVENEGAR_API_KEY', env.KAVENEGAR_API_KEY]],
-      farazsms: [
-        ['FARAZSMS_API_KEY', env.FARAZSMS_API_KEY],
-        ['FARAZSMS_PATTERN_CODE', env.FARAZSMS_PATTERN_CODE],
-        ['FARAZSMS_ORIGINATOR', env.FARAZSMS_ORIGINATOR],
-      ],
-      twilio: [
-        ['TWILIO_ACCOUNT_SID', env.TWILIO_ACCOUNT_SID],
-        ['TWILIO_AUTH_TOKEN', env.TWILIO_AUTH_TOKEN],
-        ['TWILIO_FROM_NUMBER', env.TWILIO_FROM_NUMBER],
-      ],
-    };
-
-    if (env.SMS_PROVIDER !== 'console') {
-      for (const [name, value] of credentials[env.SMS_PROVIDER]) {
-        if (!value) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [name],
-            message: `${name} is required when SMS_PROVIDER=${env.SMS_PROVIDER}`,
-          });
-        }
-      }
+    for (const name of missingSmsCredentials(env)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [name],
+        message: `${name} is required when SMS_PROVIDER=${env.SMS_PROVIDER}`,
+      });
     }
   });
 
+/** Variables the configured gateway needs. Empty for `console`, which needs none. */
+const SMS_CREDENTIALS: Record<Exclude<SmsProviderId, 'console'>, readonly string[]> = {
+  kavenegar: ['KAVENEGAR_API_KEY'],
+  farazsms: ['FARAZSMS_API_KEY', 'FARAZSMS_PATTERN_CODE', 'FARAZSMS_ORIGINATOR'],
+  twilio: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM_NUMBER'],
+};
+
+/**
+ * Credentials the selected SMS gateway is missing.
+ *
+ * One list, read twice: the schema turns it into a startup failure in
+ * production, and `smsProvider()` turns it into a fall back to the console sink
+ * everywhere else — so a developer who names a gateway without holding an
+ * account for it still gets a working sign-in instead of a delivery error.
+ */
+export function missingSmsCredentials(
+  env: Pick<ServerEnv, 'SMS_PROVIDER'> & Record<string, unknown>,
+): string[] {
+  if (env.SMS_PROVIDER === 'console') return [];
+  return SMS_CREDENTIALS[env.SMS_PROVIDER].filter((name) => !env[name]);
+}
+
 export type ServerEnv = z.infer<typeof serverSchema>;
+
+/**
+ * A server that cannot read its own configuration.
+ *
+ * Typed rather than a bare `Error` so `withRoute()` can tell "this deployment is
+ * missing a variable" apart from "this request hit a bug" — the first is a 503
+ * that names what is missing, the second is an opaque 500. Before this existed,
+ * a missing `AUTH_OTP_PEPPER` reached the browser as
+ * `{"code":"INTERNAL","message":"خطای غیرمنتظره‌ای رخ داد."}` from
+ * `POST /api/v1/auth/otp/send`, with the actual cause visible only to whoever
+ * was reading the server's stdout.
+ */
+export class EnvConfigError extends Error {
+  /** Variable names, without values — these go into logs and dev responses. */
+  readonly variables: string[];
+  readonly issues: Array<{ variable: string; message: string }>;
+
+  constructor(issues: Array<{ variable: string; message: string }>) {
+    const detail = issues.map((issue) => `  - ${issue.variable}: ${issue.message}`).join('\n');
+    super(`Invalid server environment:\n${detail}`);
+
+    this.name = 'EnvConfigError';
+    this.issues = issues;
+    this.variables = issues.map((issue) => issue.variable);
+  }
+}
+
+/**
+ * Stand-in secrets for `next dev`, so a fresh clone can sign in.
+ *
+ * Both are long enough to satisfy the schema and are worded so that anything
+ * signed with them is obviously worthless. They apply only when `NODE_ENV` is
+ * exactly `development` — not when it is unset, and not under `next build`,
+ * which sets it to `production` — and every parse that uses one says so on
+ * stdout.
+ *
+ * `DATABASE_URL` is deliberately absent from this table. A challenge has to be
+ * stored somewhere and the account has to be created somewhere; a fallback that
+ * pretended otherwise would be a second, untested copy of the sign-in path
+ * rather than a shortcut through the real one.
+ */
+const DEVELOPMENT_FALLBACKS: Record<string, string> = {
+  AUTH_JWT_SECRET: 'kayzen-development-insecure-jwt-secret-not-for-deployment',
+  AUTH_OTP_PEPPER: 'kayzen-development-insecure-otp-pepper-not-for-deployment',
+};
+
+function withDevelopmentFallbacks(source: NodeJS.ProcessEnv): {
+  values: NodeJS.ProcessEnv;
+  applied: string[];
+} {
+  if (source.NODE_ENV !== 'development') return { values: source, applied: [] };
+
+  const applied = Object.keys(DEVELOPMENT_FALLBACKS).filter((name) => !source[name]);
+  if (applied.length === 0) return { values: source, applied };
+
+  const values: NodeJS.ProcessEnv = { ...source };
+  for (const name of applied) values[name] = DEVELOPMENT_FALLBACKS[name];
+
+  return { values, applied };
+}
 
 let cachedServerEnv: ServerEnv | null = null;
 
 /**
  * Parses and caches the server environment.
  *
- * @throws {Error} listing every failing variable, on the first call made by a
- * misconfigured deployment — loudly, at request time, rather than degrading
- * silently later.
+ * @throws {EnvConfigError} listing every failing variable, on the first call
+ * made by a misconfigured deployment — loudly, at request time, rather than
+ * degrading silently later.
  */
 export function serverEnv(): ServerEnv {
   if (cachedServerEnv) return cachedServerEnv;
 
-  const parsed = serverSchema.safeParse(process.env);
+  const { values, applied } = withDevelopmentFallbacks(process.env);
+  const parsed = serverSchema.safeParse(values);
 
   if (!parsed.success) {
-    const issues = parsed.error.issues
-      .map((issue) => `  - ${issue.path.join('.') || 'env'}: ${issue.message}`)
-      .join('\n');
-    throw new Error(`Invalid server environment:\n${issues}`);
+    throw new EnvConfigError(
+      parsed.error.issues.map((issue) => ({
+        variable: issue.path.join('.') || 'env',
+        message: issue.message,
+      })),
+    );
+  }
+
+  // `console` rather than the logger: this runs at first use, the logger reads
+  // this module, and a developer needs to see it in the terminal regardless of
+  // LOG_LEVEL.
+  if (applied.length > 0) {
+    console.warn(
+      `[kayzen:env] development fallbacks in use for ${applied.join(', ')} — ` +
+        'throwaway values, set your own in .env.local before deploying anything.',
+    );
   }
 
   cachedServerEnv = parsed.data;
