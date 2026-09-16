@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 import { normalizeIranianPhone } from '../auth/phone';
-import { parsePersianNumber, toLatinDigits } from '../date/digits';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../auth/password-policy';
+import { parsePersianNumber, toLatinDigits, toPersianDigits } from '../date/digits';
 
 /**
  * The one place request shapes are defined.
@@ -129,6 +130,55 @@ export const verifyOtpSchema = z.object({
 
 export type SendOtpInput = z.infer<typeof sendOtpSchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
+
+// ---------------------------------------------------------------------------
+// Password sign-in
+// ---------------------------------------------------------------------------
+
+/**
+ * No composition rules beyond a length floor.
+ *
+ * Character-class requirements measurably push people toward `Password1!` and
+ * toward reuse; length is the property that actually costs an attacker work.
+ * NIST 800-63B says the same, and the server-side cost of scrypt is what
+ * carries the rest.
+ */
+export const passwordSchema = z
+  .string()
+  .min(
+    PASSWORD_MIN_LENGTH,
+    `رمز عبور باید دست‌کم ${toPersianDigits(PASSWORD_MIN_LENGTH)} نویسه باشد.`,
+  )
+  .max(PASSWORD_MAX_LENGTH, 'رمز عبور بیش از حد طولانی است.');
+
+export const passwordLoginSchema = z.object({
+  phone: phoneSchema,
+  // Deliberately *not* `passwordSchema`: a length rule on the way in would
+  // reject an existing password that predates the rule, and would tell an
+  // attacker where the boundary is. Wrong is wrong.
+  password: z.string().min(1, 'رمز عبور را وارد کنید.').max(PASSWORD_MAX_LENGTH),
+  timezone: timezoneSchema.optional(),
+  name: z.string().trim().max(80).optional(),
+});
+
+export const setPasswordSchema = z
+  .object({
+    password: passwordSchema,
+    /** Required when the account already has a password; ignored otherwise. */
+    currentPassword: z.string().min(1).max(PASSWORD_MAX_LENGTH).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.currentPassword && value.currentPassword === value.password) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['password'],
+        message: 'رمز تازه باید با رمز فعلی فرق داشته باشد.',
+      });
+    }
+  });
+
+export type PasswordLoginInput = z.infer<typeof passwordLoginSchema>;
+export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
 
 // ---------------------------------------------------------------------------
 // Web Push

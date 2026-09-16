@@ -92,30 +92,34 @@ enum OtpPurpose {
 // ---------------------------------------------------------------------------
 
 model User {
-  id              String          @id @default(uuid()) @db.Uuid
+  id                String          @id @default(uuid()) @db.Uuid
   /// E.164, always `+98…` for Iranian numbers. The only login identifier.
-  phone           String          @unique @db.VarChar(16)
-  phoneVerifiedAt DateTime?       @map("phone_verified_at") @db.Timestamptz(6)
-  name            String?
-  avatarUrl       String?         @map("avatar_url")
-  languageCode    String          @default("fa") @map("language_code")
+  phone             String          @unique @db.VarChar(16)
+  phoneVerifiedAt   DateTime?       @map("phone_verified_at") @db.Timestamptz(6)
+  /// scrypt hash of the account password; null when sign-in is SMS-only.
+  /// Never leaves the server: no DTO carries it and no route returns it.
+  passwordHash      String?         @map("password_hash")
+  passwordUpdatedAt DateTime?       @map("password_updated_at") @db.Timestamptz(6)
+  name              String?
+  avatarUrl         String?         @map("avatar_url")
+  languageCode      String          @default("fa") @map("language_code")
   /// IANA timezone. Drives every "what day is it for this user" calculation.
-  timezone        String          @default("Asia/Tehran")
+  timezone          String          @default("Asia/Tehran")
   /// Hour (0-23, local) at which the user's day rolls over. Night owls set 4.
-  dayStartHour    Int             @default(0) @map("day_start_hour")
-  theme           ThemePreference @default(DARK)
-  points          Int             @default(0)
-  isPremium       Boolean         @default(false) @map("is_premium")
-  ambientEnabled  Boolean         @default(true) @map("ambient_enabled")
-  hapticsEnabled  Boolean         @default(true) @map("haptics_enabled")
-  notifyAtHour    Int             @default(8) @map("notify_at_hour")
-  notifyAtMinute  Int             @default(0) @map("notify_at_minute")
+  dayStartHour      Int             @default(0) @map("day_start_hour")
+  theme             ThemePreference @default(DARK)
+  points            Int             @default(0)
+  isPremium         Boolean         @default(false) @map("is_premium")
+  ambientEnabled    Boolean         @default(true) @map("ambient_enabled")
+  hapticsEnabled    Boolean         @default(true) @map("haptics_enabled")
+  notifyAtHour      Int             @default(8) @map("notify_at_hour")
+  notifyAtMinute    Int             @default(0) @map("notify_at_minute")
   /// Anchors the 365-day curriculum; set on first sign-in.
-  enrolledAt      DateTime        @default(now()) @map("enrolled_at") @db.Timestamptz(6)
-  onboardedAt     DateTime?       @map("onboarded_at") @db.Timestamptz(6)
-  lastSeenAt      DateTime?       @map("last_seen_at") @db.Timestamptz(6)
-  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  enrolledAt        DateTime        @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  onboardedAt       DateTime?       @map("onboarded_at") @db.Timestamptz(6)
+  lastSeenAt        DateTime?       @map("last_seen_at") @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   tasks             Task[]
   habits            Habit[]

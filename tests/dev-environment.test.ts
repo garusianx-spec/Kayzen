@@ -46,6 +46,9 @@ function setEnv(values: Record<string, string | undefined>) {
 const TOUCHED = [
   'AUTH_DEV_OTP_CODE',
   'AUTH_OTP_LENGTH',
+  'UPSTASH_REDIS_REST_URL',
+  'UPSTASH_REDIS_REST_TOKEN',
+  'DIRECT_URL',
   'AUTH_JWT_SECRET',
   'AUTH_OTP_PEPPER',
   'SMS_PROVIDER',
@@ -223,5 +226,30 @@ describe('configuration failures reaching a route', () => {
     expect(describeMisconfiguration(new Error('boom'))).toBeNull();
     expect(describeMisconfiguration(new TypeError('x is not a function'))).toBeNull();
     expect(describeMisconfiguration(undefined)).toBeNull();
+  });
+});
+
+describe('blank environment variables', () => {
+  it('reads an empty value as "not set"', () => {
+    // `.env` files, CI settings pages and container orchestrators all write "I
+    // am not using this" as `NAME=`. To zod that is a value, and
+    // `z.string().url().optional()` rejects it — which is how copying
+    // `.env.example` verbatim took every route down with
+    // `UPSTASH_REDIS_REST_URL: Invalid url`, for an optional variable the app
+    // has a fallback for.
+    const env = parseEnv({ UPSTASH_REDIS_REST_URL: '', DIRECT_URL: '   ' });
+
+    expect(env.UPSTASH_REDIS_REST_URL).toBeUndefined();
+    expect(env.DIRECT_URL).toBeUndefined();
+  });
+
+  it('still rejects a value that is present and wrong', () => {
+    expect(() => parseEnv({ UPSTASH_REDIS_REST_URL: 'not-a-url' })).toThrow(EnvConfigError);
+  });
+
+  it('lets a blank required variable reach its development fallback', () => {
+    const env = parseEnv({ NODE_ENV: 'development', AUTH_OTP_PEPPER: '' });
+
+    expect(env.AUTH_OTP_PEPPER).toMatch(/development-insecure/);
   });
 });

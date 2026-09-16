@@ -61,6 +61,9 @@ const serverSchema = z
     TWILIO_AUTH_TOKEN: z.string().optional(),
     TWILIO_FROM_NUMBER: z.string().optional(),
 
+    // Optional by construction: `src/lib/ratelimit.ts` falls back to an
+    // in-process limiter when these are absent, and refuses to do so in
+    // production, where one process is not the whole deployment.
     UPSTASH_REDIS_REST_URL: z.string().url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 
@@ -183,21 +186,45 @@ export class EnvConfigError extends Error {
  * pretended otherwise would be a second, untested copy of the sign-in path
  * rather than a shortcut through the real one.
  */
+/** `process.env` as zod sees it, before Next.js's `NODE_ENV`-is-always-set augmentation. */
+type RawEnv = Record<string, string | undefined>;
+
 const DEVELOPMENT_FALLBACKS: Record<string, string> = {
   AUTH_JWT_SECRET: 'kayzen-development-insecure-jwt-secret-not-for-deployment',
   AUTH_OTP_PEPPER: 'kayzen-development-insecure-otp-pepper-not-for-deployment',
 };
 
-function withDevelopmentFallbacks(source: NodeJS.ProcessEnv): {
-  values: NodeJS.ProcessEnv;
+/**
+ * Drops variables that are present but empty.
+ *
+ * `.env` files, CI settings pages and container orchestrators all express "I am
+ * not using this" as `NAME=`, which arrives as an empty string rather than as
+ * `undefined`. To zod that is a value, so `z.string().url().optional()` rejects
+ * it — which is how copying `.env.example` verbatim used to fail with
+ * `UPSTASH_REDIS_REST_URL: Invalid url` and take every route down with a 503,
+ * for a variable that is optional and that the app has a fallback for.
+ */
+function withoutBlanks(source: RawEnv): RawEnv {
+  const values: RawEnv = {};
+
+  for (const [name, value] of Object.entries(source)) {
+    if (value !== undefined && value.trim() !== '') values[name] = value;
+  }
+
+  return values;
+}
+
+function withDevelopmentFallbacks(source: RawEnv): {
+  values: RawEnv;
   applied: string[];
 } {
-  if (source.NODE_ENV !== 'development') return { values: source, applied: [] };
+  const present = withoutBlanks(source);
+  if (present.NODE_ENV !== 'development') return { values: present, applied: [] };
 
-  const applied = Object.keys(DEVELOPMENT_FALLBACKS).filter((name) => !source[name]);
-  if (applied.length === 0) return { values: source, applied };
+  const applied = Object.keys(DEVELOPMENT_FALLBACKS).filter((name) => !present[name]);
+  if (applied.length === 0) return { values: present, applied };
 
-  const values: NodeJS.ProcessEnv = { ...source };
+  const values: RawEnv = { ...present };
   for (const name of applied) values[name] = DEVELOPMENT_FALLBACKS[name];
 
   return { values, applied };

@@ -3,6 +3,7 @@
 import { Bell, LogOut, Moon, Smartphone, Sun, Vibrate } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+import { PasswordCard } from '@/components/settings/PasswordCard';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/toast';
@@ -121,6 +122,8 @@ export function SettingsScreen() {
           در نسخهٔ نصب‌شدهٔ اندروید، لرزش مانند یک برنامهٔ بومی عمل می‌کند.
         </p>
       </section>
+
+      {user ? <PasswordCard hasPassword={user.hasPassword} /> : null}
 
       <section className="kz-card space-y-3" aria-label="یادآورها">
         <h2 className="flex items-center gap-2 text-title text-content-primary">

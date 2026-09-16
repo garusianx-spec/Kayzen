@@ -23,6 +23,10 @@ export type RateLimitScope =
   | 'otp-send-daily'
   /** Code submissions, keyed by phone; the per-challenge budget is separate. */
   | 'otp-verify'
+  /** Password sign-in attempts, keyed by phone. */
+  | 'password-login'
+  /** Password sign-in attempts, keyed by IP — one machine, many numbers. */
+  | 'password-login-ip'
   /** Refresh-token exchange and sign-out. */
   | 'auth'
   | 'mutation'
@@ -54,6 +58,15 @@ function windowFor(scope: RateLimitScope): WindowSpec {
       // Per phone rather than per challenge, so cycling challenges does not
       // reset the guessing budget.
       return { limit: serverEnv().AUTH_OTP_MAX_ATTEMPTS * 3, windowSeconds: 900 };
+    case 'password-login':
+      // A password is guessable in a way a 6-digit code with a 2-minute life is
+      // not, so this window is long and narrow. Ten is enough for a person
+      // fumbling a passphrase and useless to anything automated.
+      return { limit: 10, windowSeconds: 900 };
+    case 'password-login-ip':
+      // Wider, because a household or an office shares one address; still far
+      // below what credential stuffing needs.
+      return { limit: 30, windowSeconds: 900 };
     case 'auth':
       return { limit: 20, windowSeconds: 60 };
     case 'mutation':
@@ -77,6 +90,9 @@ export interface RateLimitResult {
 let redis: Redis | null = null;
 const limiters = new Map<RateLimitScope, Ratelimit>();
 
+/** Announced once per process, not once per request. */
+let warnedAboutInMemoryLimiter = false;
+
 function redisClient(): Redis | null {
   if (redis) return redis;
 
@@ -88,6 +104,17 @@ function redisClient(): Redis | null {
           'the in-memory rate limiter does not hold across serverless instances.',
       );
     }
+
+    // Said out loud, because a limiter that silently stops being shared is the
+    // kind of thing that gets discovered in production rather than here.
+    if (!warnedAboutInMemoryLimiter) {
+      warnedAboutInMemoryLimiter = true;
+      logger.warn(
+        { limiter: 'in-memory' },
+        'Upstash Redis is not configured; rate limits are per-process and reset on reload',
+      );
+    }
+
     return null;
   }
 

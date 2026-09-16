@@ -4,7 +4,7 @@ import { withRoute } from '@/lib/api/handler';
 import { toSessionUserDto } from '@/lib/api/dto';
 import { OTP_FAILURE_MESSAGES, verifyOtpChallenge } from '@/lib/auth/otp';
 import { maskPhone } from '@/lib/auth/phone';
-import { startSession } from '@/lib/auth/tokens';
+import { revokeAllSessions, startSession } from '@/lib/auth/tokens';
 import { prisma } from '@/lib/db/prisma';
 import { withUserContext } from '@/lib/db/rls';
 import { DEFAULT_TIMEZONE } from '@/lib/date/jalali';
@@ -26,6 +26,15 @@ import type { SessionUserDto } from '@/types/domain';
  * Account creation is the one write in the system that runs without a tenant
  * context — there is no tenant until this request succeeds. Everything after it,
  * including the `last_seen_at` touch, goes back through `withUserContext()`.
+ *
+ * **Claiming an unverified account.** `/auth/password/login` can create an
+ * account for a number nobody has proved they hold — that is what keeps sign-up
+ * working while SMS is down. Left alone, it would also mean someone could
+ * register another person's number, wait, and keep password access to the
+ * account that person eventually signs in to. So the first confirmed code on an
+ * account whose phone was never verified clears any password on it and revokes
+ * every session. Holding the SIM outranks holding a password that was never
+ * tied to it. The owner is told, and can set a new one from settings.
  */
 
 export const runtime = 'nodejs';
@@ -35,6 +44,12 @@ interface VerifyOtpResponse {
   user: SessionUserDto;
   isNewUser: boolean;
   accessTokenExpiresAt: string;
+  /**
+   * True when confirming this code cleared a password that had been set on the
+   * account before anyone proved they held the SIM. The client explains it; see
+   * the note on account claiming below.
+   */
+  passwordCleared: boolean;
 }
 
 export const POST = withRoute<VerifyOtpInput, undefined, VerifyOtpResponse>({
@@ -83,8 +98,15 @@ export const POST = withRoute<VerifyOtpInput, undefined, VerifyOtpResponse>({
     const now = new Date();
 
     let user: User;
+    let passwordCleared = false;
 
     if (existing) {
+      // The account was created by password and has never had a code confirmed
+      // against it. Whoever set that password did not prove they hold this SIM;
+      // the person completing this request did.
+      const claimingUnverified =
+        existing.phoneVerifiedAt === null && existing.passwordHash !== null;
+
       user = await withUserContext(existing.id, (db) =>
         db.user.update({
           where: { id: existing.id },
@@ -95,9 +117,22 @@ export const POST = withRoute<VerifyOtpInput, undefined, VerifyOtpResponse>({
             // not the ones the account was created in.
             ...(body.timezone ? { timezone: body.timezone } : {}),
             ...(body.name ? { name: body.name } : {}),
+            ...(claimingUnverified ? { passwordHash: null, passwordUpdatedAt: null } : {}),
           },
         }),
       );
+
+      if (claimingUnverified) {
+        // Before the new session is minted below, so anything the previous
+        // holder had open stops working.
+        const revoked = await revokeAllSessions(existing.id);
+
+        passwordCleared = true;
+        logger.warn(
+          { userId: existing.id, phone: maskPhone(phone), revokedSessions: revoked },
+          'cleared a password set before the phone was verified',
+        );
+      }
     } else {
       user = await prisma.user.create({
         data: {
@@ -119,6 +154,7 @@ export const POST = withRoute<VerifyOtpInput, undefined, VerifyOtpResponse>({
       user: toSessionUserDto(user),
       isNewUser,
       accessTokenExpiresAt: session.accessTokenExpiresAt.toISOString(),
+      passwordCleared,
     };
   },
 });

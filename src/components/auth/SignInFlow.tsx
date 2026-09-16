@@ -1,11 +1,12 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, MessageSquareDot, ShieldCheck } from 'lucide-react';
+import { ArrowRight, KeyRound, MessageSquareDot, ShieldCheck, Smartphone } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 
 import { OtpInput } from './OtpInput';
+import { PasswordSignInForm } from './PasswordSignInForm';
 import { Button } from '@/components/ui/button';
 import { FieldError, FieldLabel, Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
@@ -16,6 +17,7 @@ import { ApiClientError, api } from '@/lib/api/client';
 import { queryKeys } from '@/lib/api/queries';
 import { formatPhoneForDisplay } from '@/lib/auth/phone';
 import { toPersianDigits } from '@/lib/date/digits';
+import { cn } from '@/lib/utils';
 import { phoneSchema } from '@/lib/validation/schemas';
 import type { SessionUserDto } from '@/types/domain';
 
@@ -31,6 +33,11 @@ import type { SessionUserDto } from '@/types/domain';
  * almost never types the code: WebOTP (`useWebOtp`) inside the Android shell,
  * the keyboard's own `one-time-code` suggestion, and paste. Typing is the
  * fallback, not the plan.
+ *
+ * A password tab sits beside it. SMS delivery in Iran is not something this app
+ * controls, and "the code never arrived" is otherwise a dead end. The switcher
+ * lives here rather than a level up because it must disappear once a code is in
+ * flight: changing method mid-challenge would silently abandon it.
  */
 
 interface SendResponse {
@@ -46,9 +53,46 @@ interface VerifyResponse {
   user: SessionUserDto;
   isNewUser: boolean;
   accessTokenExpiresAt: string;
+  passwordCleared: boolean;
 }
 
 type Step = 'phone' | 'code';
+type Method = 'otp' | 'password';
+
+const METHODS: Array<{ value: Method; label: string; icon: typeof Smartphone }> = [
+  { value: 'otp', label: 'ورود با پیامک', icon: Smartphone },
+  { value: 'password', label: 'ورود با رمز عبور', icon: KeyRound },
+];
+
+function MethodTabs({ value, onChange }: { value: Method; onChange: (next: Method) => void }) {
+  return (
+    <div role="tablist" aria-label="روش ورود" className="grid grid-cols-2 gap-2">
+      {METHODS.map((method) => {
+        const Icon = method.icon;
+        const active = method.value === value;
+
+        return (
+          <button
+            key={method.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(method.value)}
+            className={cn(
+              'kz-pressable flex items-center justify-center gap-2 rounded-card border p-3 text-caption',
+              active
+                ? 'border-violet bg-violet-soft text-violet'
+                : 'border-border text-content-muted',
+            )}
+          >
+            <Icon className="h-4 w-4" aria-hidden />
+            {method.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function SignInFlow() {
   const router = useRouter();
@@ -56,6 +100,7 @@ export function SignInFlow() {
   const haptics = useHapticFeedback();
   const { success, error: errorToast } = useToast();
 
+  const [method, setMethod] = useState<Method>('otp');
   const [step, setStep] = useState<Step>('phone');
   const [phoneInput, setPhoneInput] = useState('');
   const [challenge, setChallenge] = useState<SendResponse | null>(null);
@@ -125,7 +170,14 @@ export function SignInFlow() {
         haptics.impact('success');
         queryClient.setQueryData(queryKeys.session, result.user);
 
-        success(result.isNewUser ? 'خوش آمدید 🌱' : 'خوش برگشتید');
+        if (result.passwordCleared) {
+          // Rare, and worth a sentence rather than a silent surprise the next
+          // time they try the password tab.
+          success('خوش برگشتید', 'رمز عبور قبلی این شماره پاک شد؛ از تنظیمات رمز تازه بگذارید.');
+        } else {
+          success(result.isNewUser ? 'خوش آمدید 🌱' : 'خوش برگشتید');
+        }
+
         router.replace('/');
       } catch (caught) {
         haptics.error();
@@ -168,53 +220,66 @@ export function SignInFlow() {
     },
   });
 
+  if (method === 'password') {
+    return (
+      <div className="space-y-6">
+        <MethodTabs value={method} onChange={setMethod} />
+        <PasswordSignInForm />
+      </div>
+    );
+  }
+
   if (step === 'phone') {
     return (
-      <section className="space-y-6">
-        <header className="space-y-2 text-center">
-          <h1 className="text-display text-content-primary">کایزن</h1>
-          <p className="text-body text-content-muted">
-            با شمارهٔ موبایل وارد شوید؛ رمزی در کار نیست.
+      <div className="space-y-6">
+        <MethodTabs value={method} onChange={setMethod} />
+
+        <section className="space-y-6">
+          <header className="space-y-2 text-center">
+            <h1 className="text-display text-content-primary">کایزن</h1>
+            <p className="text-body text-content-muted">
+              با شمارهٔ موبایل وارد شوید؛ رمزی در کار نیست.
+            </p>
+          </header>
+
+          <div>
+            <FieldLabel htmlFor="phone">شمارهٔ موبایل</FieldLabel>
+            <Input
+              id="phone"
+              value={phoneInput}
+              onChange={(event) => {
+                setPhoneInput(event.target.value);
+                setError(undefined);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && canSend) void sendCode();
+              }}
+              // `tel` gives the keyboard's own number autofill; the field itself
+              // accepts Persian digits and normalises them.
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              enterKeyHint="send"
+              dir="ltr"
+              className="tabular text-center"
+              placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+              hasError={Boolean(error)}
+              autoFocus
+            />
+            <FieldError message={error} />
+          </div>
+
+          <Button size="block" onClick={sendCode} disabled={!canSend} isLoading={isSending}>
+            ارسال کد تأیید
+            <ArrowRight className="h-5 w-5 rotate-180" aria-hidden />
+          </Button>
+
+          <p className="flex items-start gap-2 text-caption-sm text-content-muted">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald" aria-hidden />
+            شماره فقط برای ورود استفاده می‌شود و در اختیار کسی قرار نمی‌گیرد.
           </p>
-        </header>
-
-        <div>
-          <FieldLabel htmlFor="phone">شمارهٔ موبایل</FieldLabel>
-          <Input
-            id="phone"
-            value={phoneInput}
-            onChange={(event) => {
-              setPhoneInput(event.target.value);
-              setError(undefined);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && canSend) void sendCode();
-            }}
-            // `tel` gives the keyboard's own number autofill; the field itself
-            // accepts Persian digits and normalises them.
-            type="tel"
-            inputMode="numeric"
-            autoComplete="tel"
-            enterKeyHint="send"
-            dir="ltr"
-            className="tabular text-center"
-            placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-            hasError={Boolean(error)}
-            autoFocus
-          />
-          <FieldError message={error} />
-        </div>
-
-        <Button size="block" onClick={sendCode} disabled={!canSend} isLoading={isSending}>
-          ارسال کد تأیید
-          <ArrowRight className="h-5 w-5 rotate-180" aria-hidden />
-        </Button>
-
-        <p className="flex items-start gap-2 text-caption-sm text-content-muted">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald" aria-hidden />
-          شماره فقط برای ورود استفاده می‌شود و در اختیار کسی قرار نمی‌گیرد.
-        </p>
-      </section>
+        </section>
+      </div>
     );
   }
 

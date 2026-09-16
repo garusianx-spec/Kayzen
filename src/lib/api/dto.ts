@@ -66,6 +66,10 @@ export function toSessionUserDto(user: User): SessionUserDto {
     notifyAtMinute: user.notifyAtMinute,
     onboardedAt: user.onboardedAt?.toISOString() ?? null,
     enrolledAt: user.enrolledAt.toISOString(),
+    // A boolean, not the hash: the settings screen needs to say "set" or
+    // "change", and the login screen needs to explain why a password failed on
+    // an account that has none.
+    hasPassword: user.passwordHash !== null,
   };
 }
 

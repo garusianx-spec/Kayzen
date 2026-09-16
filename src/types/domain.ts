@@ -62,6 +62,8 @@ export interface SessionUserDto {
   notifyAtMinute: number;
   onboardedAt: string | null;
   enrolledAt: string;
+  /** Whether a password is set. The hash itself never leaves the server. */
+  hasPassword: boolean;
 }
 
 export interface TaskDto {
