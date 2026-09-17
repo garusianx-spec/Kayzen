@@ -66,6 +66,45 @@ export interface SessionUserDto {
   hasPassword: boolean;
 }
 
+export interface VocabularyWordDto {
+  id: string;
+  language: string;
+  level: string;
+  term: string;
+  transliteration: string | null;
+  meaningFa: string;
+  partOfSpeech: string | null;
+  example: string | null;
+  exampleFa: string | null;
+  /** This learner's standing with the word. */
+  status: 'LEARNING' | 'REVIEWING' | 'MASTERED';
+  correctRuns: number;
+}
+
+export interface LanguageCourseDto {
+  id: string;
+  language: string;
+  languageLabel: string;
+  flag: string;
+  level: string;
+  levelLabel: string;
+  wordsPerDay: number;
+  masteredCount: number;
+  corpusSize: number;
+  /** True when the level's corpus is exhausted and days now repeat. */
+  wrapped: boolean;
+  words: VocabularyWordDto[];
+}
+
+export interface VocabularyVaultGroup {
+  language: string;
+  languageLabel: string;
+  flag: string;
+  total: number;
+  mastered: number;
+  words: Array<VocabularyWordDto & { levelLabel: string }>;
+}
+
 export interface TaskChecklistItemDto {
   id: string;
   title: string;

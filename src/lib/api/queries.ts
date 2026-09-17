@@ -17,7 +17,9 @@ import type {
   NoteDto,
   ReadingLogDto,
   SessionUserDto,
+  LanguageCourseDto,
   TaskCategoryDto,
+  VocabularyVaultGroup,
   TaskDto,
   TodaySnapshotDto,
 } from '@/types/domain';
@@ -41,6 +43,8 @@ export const queryKeys = {
   today: ['today'] as const,
   tasks: (scope: string = 'all') => ['tasks', scope] as const,
   taskCategories: ['tasks', 'categories'] as const,
+  vocabulary: ['vocabulary'] as const,
+  vocabularyVault: (filters: string) => ['vocabulary', 'vault', filters] as const,
   habits: ['habits'] as const,
   financeBoxes: ['finance', 'boxes'] as const,
   financeTransactions: (boxId?: string) => ['finance', 'transactions', boxId ?? 'all'] as const,
@@ -184,6 +188,79 @@ export function useUpdateTask() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
       void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+}
+
+/** Today's words, per active language. */
+export function useVocabulary() {
+  return useQuery({
+    queryKey: queryKeys.vocabulary,
+    queryFn: async () => {
+      const result = await api.get<{ courses: LanguageCourseDto[] }>('/vocabulary');
+      return result.courses;
+    },
+  });
+}
+
+export function useVocabularyVault(filters: {
+  language?: string;
+  search?: string;
+  status?: string;
+}) {
+  const query = new URLSearchParams();
+  if (filters.language) query.set('language', filters.language);
+  if (filters.search) query.set('search', filters.search);
+  if (filters.status) query.set('status', filters.status);
+  const key = query.toString();
+
+  return useQuery({
+    queryKey: queryKeys.vocabularyVault(key),
+    queryFn: async () => {
+      const result = await api.get<{ groups: VocabularyVaultGroup[]; total: number }>(
+        `/vocabulary/vault${key ? `?${key}` : ''}`,
+      );
+      return result;
+    },
+  });
+}
+
+export function useReviewWord() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: { wordId: string; correct: boolean }) =>
+      api.post<{ status: string; correctRuns: number; remaining: number; justMastered: boolean }>(
+        '/vocabulary/review',
+        variables,
+      ),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.vocabulary });
+      void queryClient.invalidateQueries({ queryKey: ['vocabulary', 'vault'] });
+    },
+  });
+}
+
+export function useAddLanguageCourse() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: { language: string; level: string }) =>
+      api.post<{ id: string }>('/vocabulary/courses', variables),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.vocabulary });
+    },
+  });
+}
+
+export function useUpdateLanguageCourse() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; level?: string; archived?: boolean }) =>
+      api.patch<{ id: string }>(`/vocabulary/courses/${id}`, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.vocabulary });
     },
   });
 }

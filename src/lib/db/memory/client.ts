@@ -55,6 +55,12 @@ function delegateFor(store: MemoryStore, model: string, ready: Promise<void>) {
 
     create: (args: DelegateArgs) => store.create(model, { ...args, data: args.data ?? {} }),
 
+    createMany: (args: DelegateArgs & { data?: Row | Row[] }) => {
+      const rows = Array.isArray(args.data) ? args.data : args.data ? [args.data] : [];
+      for (const row of rows) store.create(model, { data: row });
+      return { count: rows.length };
+    },
+
     update: (args: DelegateArgs) =>
       store.update(model, { ...args, where: args.where ?? {}, data: args.data ?? {} }) ??
       notFound(model, 'update'),

@@ -1,4 +1,5 @@
 import { BOOKS_365 } from '../../../../prisma/data/books-365';
+import { vocabularyRows } from '../../../../prisma/data/vocabulary';
 import { hashPassword } from '../../auth/password';
 import type { MemoryStore } from './engine';
 
@@ -60,6 +61,10 @@ export async function seedMemoryStore(store: MemoryStore): Promise<{ userId: str
         readingMinutes: book.readingMinutes,
       },
     });
+  }
+
+  for (const word of vocabularyRows()) {
+    store.create('VocabularyWord', { data: word });
   }
 
   const user = store.create('User', {
@@ -156,6 +161,15 @@ export async function seedMemoryStore(store: MemoryStore): Promise<{ userId: str
       eventAt: at(now, 45, 0),
     },
   });
+
+  // Two of the three languages the brief allows, so the screen opens on
+  // something to do rather than on a chooser.
+  for (const [language, level] of [
+    ['ENGLISH', 'INTERMEDIATE'],
+    ['TURKISH', 'BEGINNER'],
+  ] as const) {
+    store.create('LanguageCourse', { data: { userId, language, level } });
+  }
 
   store.create('Note', {
     data: {

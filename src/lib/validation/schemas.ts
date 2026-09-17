@@ -181,6 +181,50 @@ export type PasswordLoginInput = z.infer<typeof passwordLoginSchema>;
 export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
 
 // ---------------------------------------------------------------------------
+// Daily vocabulary
+// ---------------------------------------------------------------------------
+
+export const learningLanguageSchema = z.enum(['ENGLISH', 'TURKISH', 'FRENCH', 'GERMAN', 'SPANISH']);
+
+export const learningLevelSchema = z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED']);
+
+export const languageCourseSchema = z.object({
+  language: learningLanguageSchema,
+  level: learningLevelSchema.default('BEGINNER'),
+  wordsPerDay: z.coerce.number().int().min(1).max(10).default(10),
+});
+
+export const updateLanguageCourseSchema = z
+  .object({
+    level: learningLevelSchema.optional(),
+    wordsPerDay: z.coerce.number().int().min(1).max(10).optional(),
+    /** `true` retires the course without deleting what was learned from it. */
+    archived: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'حداقل یک فیلد برای به‌روزرسانی لازم است.',
+  });
+
+export const reviewWordSchema = z.object({
+  wordId: z.string().uuid(),
+  correct: z.boolean(),
+});
+
+export const vaultQuerySchema = z.object({
+  language: learningLanguageSchema.optional(),
+  level: learningLevelSchema.optional(),
+  /** Matches the term or the Persian meaning. */
+  search: z.string().trim().max(60).optional(),
+  status: z.enum(['LEARNING', 'REVIEWING', 'MASTERED', 'ALL']).default('ALL'),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
+
+export type LanguageCourseInput = z.infer<typeof languageCourseSchema>;
+export type UpdateLanguageCourseInput = z.infer<typeof updateLanguageCourseSchema>;
+export type ReviewWordInput = z.infer<typeof reviewWordSchema>;
+export type VaultQuery = z.infer<typeof vaultQuerySchema>;
+
+// ---------------------------------------------------------------------------
 // Web Push
 // ---------------------------------------------------------------------------
 

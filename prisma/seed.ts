@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 
 import { BOOKS_365, CURATED_DAYS } from './data/books-365';
+import { vocabularyRows } from './data/vocabulary';
 import { CURRICULUM_LENGTH } from '../src/lib/domain/books-365';
 
 /**
@@ -21,6 +22,31 @@ const prisma = new PrismaClient();
 async function main(): Promise<void> {
   let created = 0;
   let updated = 0;
+
+  // The vocabulary corpus is global reference data, like the library: upserted
+  // on (language, level, term), so re-running after adding words is safe and
+  // editing a meaning updates it in place.
+  let vocabulary = 0;
+  for (const word of vocabularyRows()) {
+    await prisma.vocabularyWord.upsert({
+      where: {
+        language_level_term: {
+          language: word.language,
+          level: word.level,
+          term: word.term,
+        },
+      },
+      create: word,
+      update: {
+        transliteration: word.transliteration,
+        meaningFa: word.meaningFa,
+        partOfSpeech: word.partOfSpeech,
+      },
+    });
+    vocabulary += 1;
+  }
+
+  console.log(`vocabulary: ${vocabulary} words upserted`);
 
   for (const book of BOOKS_365) {
     const existing = await prisma.book365.findUnique({
