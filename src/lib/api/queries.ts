@@ -346,6 +346,39 @@ export function useMarkNotificationsRead() {
   });
 }
 
+/**
+ * Account preferences, written through the session cache.
+ *
+ * Optimistic: theme, haptics and the home layout all take effect locally the
+ * moment they are chosen, and a setting that waits for a round trip before it
+ * moves feels broken on a slow connection. If the write fails the cache is put
+ * back and the next refetch settles it.
+ */
+export function useUpdatePreferences() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: Record<string, unknown>) =>
+      api.patch<{ user: SessionUserDto }>('/preferences', variables),
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.session });
+      const previous = queryClient.getQueryData<SessionUserDto>(queryKeys.session);
+
+      queryClient.setQueryData<SessionUserDto>(queryKeys.session, (current) =>
+        current ? { ...current, ...variables } : current,
+      );
+
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKeys.session, context.previous);
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData(queryKeys.session, result.user);
+    },
+  });
+}
+
 export function useToggleTask() {
   const queryClient = useQueryClient();
 

@@ -64,6 +64,8 @@ export interface SessionUserDto {
   enrolledAt: string;
   /** Whether a password is set. The hash itself never leaves the server. */
   hasPassword: boolean;
+  /** Visible home widgets, in order. Already resolved against the registry. */
+  homeWidgets: string[];
 }
 
 export interface NotificationDto {

@@ -148,6 +148,11 @@ model User {
   isPremium         Boolean         @default(false) @map("is_premium")
   ambientEnabled    Boolean         @default(true) @map("ambient_enabled")
   hapticsEnabled    Boolean         @default(true) @map("haptics_enabled")
+  /// Which home widgets are visible, and in what order: `{ "visible": [...] }`.
+  /// Null means "never customised", which is how the default layout can change
+  /// later without every existing account being pinned to today's version —
+  /// and how an empty list stays a real choice rather than a sentinel.
+  homeWidgets       Json?           @map("home_widgets")
   notifyAtHour      Int             @default(8) @map("notify_at_hour")
   notifyAtMinute    Int             @default(0) @map("notify_at_minute")
   /// Anchors the 365-day curriculum; set on first sign-in.

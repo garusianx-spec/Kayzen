@@ -16,6 +16,7 @@ import type {
 
 import { maskPhone } from '../auth/phone';
 import { daysUntil, formatRelativeJalali } from '../date/jalali';
+import { parseLayout } from '../domain/home-widgets';
 import { levelFromPoints } from '../domain/points';
 import type { StreakResult } from '../domain/streak-engine';
 import type {
@@ -81,6 +82,10 @@ export function toSessionUserDto(user: User): SessionUserDto {
     // "change", and the login screen needs to explain why a password failed on
     // an account that has none.
     hasPassword: user.passwordHash !== null,
+    // Resolved here rather than on the client, so a layout saved by an older
+    // release is cleaned up once, server-side, instead of in every component
+    // that reads it.
+    homeWidgets: parseLayout(user.homeWidgets),
   };
 }
 

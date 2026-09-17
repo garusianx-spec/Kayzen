@@ -535,6 +535,15 @@ export const updatePreferencesSchema = z
     hapticsEnabled: z.boolean().optional(),
     notifyAtHour: z.coerce.number().int().min(0).max(23).optional(),
     notifyAtMinute: z.coerce.number().int().min(0).max(59).optional(),
+    /**
+     * The home layout, as an ordered list of visible widget ids.
+     *
+     * Validated only for shape here: which ids exist is the registry's
+     * business, and `parseLayout` already drops the ones this version does not
+     * know about. Rejecting an unknown id at the door would mean a client one
+     * release ahead could not save its own layout back.
+     */
+    homeWidgets: z.array(z.string().max(40)).max(40).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'حداقل یک تنظیم برای به‌روزرسانی لازم است.',

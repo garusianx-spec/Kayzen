@@ -1,5 +1,6 @@
 import { toSessionUserDto } from '@/lib/api/dto';
 import { withAuthedRoute } from '@/lib/api/handler';
+import { parseLayout, serializeLayout } from '@/lib/domain/home-widgets';
 import { updatePreferencesSchema, type UpdatePreferencesInput } from '@/lib/validation/schemas';
 import type { SessionUserDto } from '@/types/domain';
 
@@ -31,6 +32,9 @@ export const PATCH = withAuthedRoute<UpdatePreferencesInput, undefined, { user: 
         ...(body.hapticsEnabled !== undefined ? { hapticsEnabled: body.hapticsEnabled } : {}),
         ...(body.notifyAtHour !== undefined ? { notifyAtHour: body.notifyAtHour } : {}),
         ...(body.notifyAtMinute !== undefined ? { notifyAtMinute: body.notifyAtMinute } : {}),
+        ...(body.homeWidgets !== undefined
+          ? { homeWidgets: serializeLayout(parseLayout({ visible: body.homeWidgets })) }
+          : {}),
       },
     });
 

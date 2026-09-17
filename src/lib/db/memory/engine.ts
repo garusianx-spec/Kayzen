@@ -323,6 +323,32 @@ function applyDefaults(model: Model, data: Row): Row {
   return row;
 }
 
+/** The wrappers Prisma uses for an in-place change to a column's value. */
+const ATOMIC_OPERATIONS = new Set(['set', 'increment', 'decrement', 'multiply', 'divide', 'push']);
+
+/**
+ * Distinguishes `{ increment: 5 }` from a value that merely happens to be an
+ * object.
+ *
+ * A `Json` column holds arbitrary objects, and `{ visible: [...] }` — the home
+ * layout — is one of them. Treating every object as an operation wrapper made
+ * saving that layout throw, which is the memory database doing its job (it
+ * refuses what it does not understand rather than writing something else) but
+ * is still a hole in what it understands.
+ *
+ * Two conditions, both required: the field must not be `Json`, and every key
+ * must be an operation name. Either alone would misfire — a `Json` column can
+ * legitimately contain a key called `set`.
+ */
+function isAtomicUpdate(field: Field, value: unknown): boolean {
+  if (field.type === 'Json') return false;
+  if (typeof value !== 'object' || value === null) return false;
+  if (value instanceof Date || Array.isArray(value)) return false;
+
+  const keys = Object.keys(value);
+  return keys.length > 0 && keys.every((key) => ATOMIC_OPERATIONS.has(key));
+}
+
 /**
  * The atomic number updates, preserving a Decimal column's type.
  *
@@ -354,12 +380,7 @@ function applyUpdate(model: Model, row: Row, data: Row): Row {
     if (!field) throw new Error(`memory database: unknown field ${model.name}.${key}`);
     if (field.kind === 'object') continue;
 
-    if (
-      typeof value === 'object' &&
-      value !== null &&
-      !(value instanceof Date) &&
-      !Array.isArray(value)
-    ) {
+    if (isAtomicUpdate(field, value)) {
       const operation = value as Record<string, unknown>;
 
       if ('set' in operation) next[key] = operation.set;
