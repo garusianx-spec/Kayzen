@@ -180,5 +180,46 @@ export async function seedMemoryStore(store: MemoryStore): Promise<{ userId: str
     },
   });
 
+  // A little history, so the notification centre opens onto something and the
+  // bell has a badge to draw.
+  const notifications = [
+    {
+      category: 'TASK_REMINDER',
+      title: 'کارهای امروزت منتظرند',
+      body: 'دو کار برای امروز مانده؛ اولی کمتر از ده دقیقه وقت می‌برد.',
+      deepLink: '/',
+      readAt: null,
+      createdAt: new Date(now.getTime() - 40 * 60_000),
+    },
+    {
+      category: 'VOCABULARY',
+      title: 'ده واژهٔ امروز آماده است',
+      body: 'انگلیسی، سطح متوسط — از «gradually» شروع می‌کنیم.',
+      deepLink: '/tools/vocabulary',
+      readAt: null,
+      createdAt: new Date(now.getTime() - 3 * 3_600_000),
+    },
+    {
+      category: 'HABIT_PROMPT',
+      title: 'زنجیرهٔ مطالعه‌ات ۴ روزه شد',
+      body: 'یک روز دیگر تا رکورد خودت.',
+      deepLink: '/habits',
+      readAt: new Date(now.getTime() - 20 * 3_600_000),
+      createdAt: new Date(now.getTime() - 22 * 3_600_000),
+    },
+    {
+      category: 'FINANCIAL_MILESTONE',
+      title: 'یک‌چهارم راه سفر تابستان',
+      body: '۱۲٬۵۰۰٬۰۰۰ تومان از ۵۰ میلیون جمع شده.',
+      deepLink: '/finance',
+      readAt: new Date(now.getTime() - 30 * 3_600_000),
+      createdAt: new Date(now.getTime() - 30 * 3_600_000),
+    },
+  ] as const;
+
+  for (const notification of notifications) {
+    store.create('NotificationLog', { data: { userId, ...notification } });
+  }
+
   return { userId };
 }

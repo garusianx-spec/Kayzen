@@ -18,6 +18,8 @@ import type {
   ReadingLogDto,
   SessionUserDto,
   LanguageCourseDto,
+  NotificationDto,
+  NotificationPreferenceDto,
   TaskCategoryDto,
   VocabularyVaultGroup,
   TaskDto,
@@ -44,6 +46,8 @@ export const queryKeys = {
   tasks: (scope: string = 'all') => ['tasks', scope] as const,
   taskCategories: ['tasks', 'categories'] as const,
   vocabulary: ['vocabulary'] as const,
+  notifications: (filter: string) => ['notifications', filter] as const,
+  notificationPreferences: ['notifications', 'preferences'] as const,
   vocabularyVault: (filters: string) => ['vocabulary', 'vault', filters] as const,
   habits: ['habits'] as const,
   financeBoxes: ['finance', 'boxes'] as const,
@@ -261,6 +265,83 @@ export function useUpdateLanguageCourse() {
       api.patch<{ id: string }>(`/vocabulary/courses/${id}`, patch),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.vocabulary });
+    },
+  });
+}
+
+export function useNotifications(filter: 'all' | 'unread' = 'all') {
+  return useQuery({
+    queryKey: queryKeys.notifications(filter),
+    queryFn: async () => {
+      const result = await api.get<{ notifications: NotificationDto[]; unread: number }>(
+        `/notifications?filter=${filter}`,
+      );
+      return result;
+    },
+    // The bell badge is on screen constantly; a short window keeps it honest
+    // without turning the header into a poller.
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useNotificationPreferences() {
+  return useQuery({
+    queryKey: queryKeys.notificationPreferences,
+    queryFn: async () => {
+      const result = await api.get<{ preferences: NotificationPreferenceDto[] }>(
+        '/notifications/preferences',
+      );
+      return result.preferences;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSetNotificationPreference() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: { category: string; enabled: boolean }) =>
+      api.patch<{ category: string; enabled: boolean }>('/notifications/preferences', variables),
+    // Optimistic: a switch that waits for a round trip before moving feels
+    // broken, and the cost of being wrong here is one flipped toggle.
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.notificationPreferences });
+      const previous = queryClient.getQueryData<NotificationPreferenceDto[]>(
+        queryKeys.notificationPreferences,
+      );
+
+      queryClient.setQueryData<NotificationPreferenceDto[]>(
+        queryKeys.notificationPreferences,
+        (current) =>
+          current?.map((preference) =>
+            preference.category === variables.category
+              ? { ...preference, enabled: variables.enabled }
+              : preference,
+          ),
+      );
+
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.notificationPreferences, context.previous);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.notificationPreferences });
+    },
+  });
+}
+
+export function useMarkNotificationsRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids?: string[]) =>
+      api.post<{ marked: number; unread: number }>('/notifications/read', ids ? { ids } : {}),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 }

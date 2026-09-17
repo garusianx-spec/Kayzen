@@ -225,6 +225,39 @@ export type ReviewWordInput = z.infer<typeof reviewWordSchema>;
 export type VaultQuery = z.infer<typeof vaultQuerySchema>;
 
 // ---------------------------------------------------------------------------
+// Notification centre
+// ---------------------------------------------------------------------------
+
+export const notificationCategorySchema = z.enum([
+  'TASK_REMINDER',
+  'HABIT_PROMPT',
+  'VOCABULARY',
+  'READING',
+  'FINANCIAL_MILESTONE',
+  'SYSTEM',
+]);
+
+export const notificationPreferenceSchema = z.object({
+  category: notificationCategorySchema,
+  enabled: z.boolean(),
+});
+
+export const listNotificationsSchema = z.object({
+  /** `unread` is the badge's query; `all` is the history. */
+  filter: z.enum(['all', 'unread']).default('all'),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export const markReadSchema = z.object({
+  /** Omit to mark everything read — the "mark all" button. */
+  ids: z.array(z.string().uuid()).max(100).optional(),
+});
+
+export type NotificationPreferenceInput = z.infer<typeof notificationPreferenceSchema>;
+export type ListNotificationsQuery = z.infer<typeof listNotificationsSchema>;
+export type MarkReadInput = z.infer<typeof markReadSchema>;
+
+// ---------------------------------------------------------------------------
 // Web Push
 // ---------------------------------------------------------------------------
 

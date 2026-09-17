@@ -66,6 +66,31 @@ export interface SessionUserDto {
   hasPassword: boolean;
 }
 
+export interface NotificationDto {
+  id: string;
+  category: string;
+  categoryLabel: string;
+  icon: string;
+  colorToken: string;
+  title: string;
+  body: string;
+  /** Always an in-app path; see `resolveDeepLink`. */
+  href: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface NotificationPreferenceDto {
+  category: string;
+  label: string;
+  description: string;
+  icon: string;
+  colorToken: string;
+  enabled: boolean;
+  /** False for categories the user may not switch off. */
+  togglable: boolean;
+}
+
 export interface VocabularyWordDto {
   id: string;
   language: string;

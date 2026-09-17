@@ -4,6 +4,7 @@ import { Settings } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { NotificationBell } from './NotificationBell';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { useHapticFeedback } from '@/hooks/use-haptic-feedback';
 import { NAV_ITEMS } from './BottomNav';
@@ -47,15 +48,19 @@ export function AppHeader() {
           )}
         </Link>
 
-        <Link
-          href="/settings"
-          onClick={() => haptics.selection()}
-          aria-label="تنظیمات"
-          aria-current={pathname === '/settings' ? 'page' : undefined}
-          className="kz-pressable rounded-full border border-border p-2 text-muted-foreground hover:text-foreground"
-        >
-          <Settings className="h-5 w-5" aria-hidden />
-        </Link>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+
+          <Link
+            href="/settings"
+            onClick={() => haptics.selection()}
+            aria-label="تنظیمات"
+            aria-current={pathname === '/settings' ? 'page' : undefined}
+            className="kz-pressable flex h-11 w-11 items-center justify-center rounded-full border border-border text-muted-foreground hover:text-foreground"
+          >
+            <Settings className="h-5 w-5" aria-hidden />
+          </Link>
+        </div>
       </div>
     </header>
   );
