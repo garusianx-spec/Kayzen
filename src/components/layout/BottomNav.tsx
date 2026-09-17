@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, Flame, Home, Timer, Wallet } from 'lucide-react';
+import { BookOpen, Flame, Home, LayoutGrid, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
@@ -25,10 +25,17 @@ interface NavItem {
   icon: LucideIcon;
 }
 
+/**
+ * Five destinations, and no more.
+ *
+ * The focus room moved into the tools hub when the hub arrived: a bottom bar
+ * is the app's table of contents, and a timer is something you go to on
+ * purpose, not somewhere you navigate to by reflex.
+ */
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/', label: 'امروز', icon: Home },
   { href: '/habits', label: 'عادت‌ها', icon: Flame },
-  { href: '/focus', label: 'تمرکز', icon: Timer },
+  { href: '/tools', label: 'ابزارها', icon: LayoutGrid },
   { href: '/finance', label: 'مالی', icon: Wallet },
   { href: '/library', label: 'کتابخانه', icon: BookOpen },
 ] as const;

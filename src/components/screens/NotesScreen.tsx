@@ -1,5 +1,6 @@
 'use client';
 
+import { ScreenAddButton } from '@/components/layout/ScreenAddButton';
 import { Search, StickyNote } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -33,13 +34,17 @@ export function NotesScreen() {
 
   return (
     <div className="space-y-5 px-4 pt-4">
-      <header className="space-y-1">
-        <h1 className="text-display text-content-primary">یادداشت‌ها</h1>
-        <p className="text-caption text-content-secondary">
-          {notes?.length
-            ? `${toPersianDigits(notes.length)} یادداشت`
-            : 'هرچه را نباید فراموش شود، اینجا بنویسید.'}
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-display text-content-primary">یادداشت‌ها</h1>
+          <p className="text-caption text-content-secondary">
+            {notes?.length
+              ? `${toPersianDigits(notes.length)} یادداشت`
+              : 'هرچه را نباید فراموش شود، اینجا بنویسید.'}
+          </p>
+        </div>
+
+        <ScreenAddButton kind="note" label="یادداشت تازه" />
       </header>
 
       <div className="relative">
@@ -68,7 +73,7 @@ export function NotesScreen() {
           description={
             debouncedQuery
               ? 'عبارت دیگری را امتحان کنید.'
-              : 'با دکمهٔ + یک یادداشت سریع اضافه کنید.'
+              : 'اولین فکری که نباید فراموش شود را همین‌جا بنویس.'
           }
         />
       ) : (

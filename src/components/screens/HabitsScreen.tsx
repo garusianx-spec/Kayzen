@@ -2,6 +2,7 @@
 
 import { HabitCard } from '@/components/widgets/HabitCard';
 import { EmptyState } from '@/components/screens/TodayScreen';
+import { ScreenAddButton } from '@/components/layout/ScreenAddButton';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useHabits } from '@/lib/api/queries';
 import { toPersianDigits } from '@/lib/date/digits';
@@ -21,13 +22,17 @@ export function HabitsScreen() {
 
   return (
     <div className="space-y-6 px-4 pt-4">
-      <header className="space-y-1">
-        <h1 className="text-display text-content-primary">عادت‌ها</h1>
-        <p className="text-caption text-content-secondary">
-          {longestStreak > 0
-            ? `بلندترین زنجیرهٔ فعال شما ${toPersianDigits(longestStreak)} روز است.`
-            : 'زنجیره را از امروز شروع کنید.'}
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-display text-content-primary">عادت‌ها</h1>
+          <p className="text-caption text-content-secondary">
+            {longestStreak > 0
+              ? `بلندترین زنجیرهٔ فعال شما ${toPersianDigits(longestStreak)} روز است.`
+              : 'از همین امروز، یک کار کوچک هر روز.'}
+          </p>
+        </div>
+
+        <ScreenAddButton kind="habit" label="عادت تازه" />
       </header>
 
       {isLoading ? (
@@ -38,8 +43,8 @@ export function HabitsScreen() {
         </div>
       ) : (habits?.length ?? 0) === 0 ? (
         <EmptyState
-          title="هنوز عادتی نساخته‌اید"
-          description="با دکمهٔ + اولین عادت روزانه‌تان را اضافه کنید."
+          title="اینجا هنوز خالی است"
+          description="یک عادت کوچک انتخاب کن — آن‌قدر کوچک که نشود انجامش نداد."
         />
       ) : (
         <>

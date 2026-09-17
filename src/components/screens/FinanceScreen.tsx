@@ -1,5 +1,6 @@
 'use client';
 
+import { ScreenAddButton } from '@/components/layout/ScreenAddButton';
 import { ArrowDownLeft, ArrowUpRight, PiggyBank } from 'lucide-react';
 import { useState } from 'react';
 
@@ -38,13 +39,17 @@ export function FinanceScreen() {
 
   return (
     <div className="space-y-6 px-4 pt-4">
-      <header className="space-y-1">
-        <h1 className="text-display text-content-primary">صندوق‌ها</h1>
-        <p className="text-caption text-content-secondary">
-          {totalTarget > 0
-            ? `${formatCompactCurrency(totalSaved)} از ${formatCompactCurrency(totalTarget)} جمع شده`
-            : 'اولین هدف مالی‌تان را بسازید.'}
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-display text-content-primary">صندوق‌ها</h1>
+          <p className="text-caption text-content-secondary">
+            {totalTarget > 0
+              ? `${formatCompactCurrency(totalSaved)} از ${formatCompactCurrency(totalTarget)} جمع شده`
+              : 'اولین هدفت را بگذار؛ از همان‌جا شروع می‌شود.'}
+          </p>
+        </div>
+
+        <ScreenAddButton kind="financial-box" label="صندوق تازه" />
       </header>
 
       {isLoading ? (
@@ -54,8 +59,8 @@ export function FinanceScreen() {
         </div>
       ) : (boxes?.length ?? 0) === 0 ? (
         <EmptyState
-          title="هنوز صندوقی نساخته‌اید"
-          description="با دکمهٔ + یک هدف مالی اضافه کنید."
+          title="هنوز صندوقی نداری"
+          description="یک هدف بگذار؛ حتی ماهی صد هزار تومان هم جمع می‌شود."
         />
       ) : (
         <div className="space-y-3">

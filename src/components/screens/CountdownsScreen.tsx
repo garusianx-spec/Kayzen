@@ -1,5 +1,6 @@
 'use client';
 
+import { ScreenAddButton } from '@/components/layout/ScreenAddButton';
 import { CalendarClock, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -31,13 +32,17 @@ export function CountdownsScreen() {
 
   return (
     <div className="space-y-5 px-4 pt-4">
-      <header className="space-y-1">
-        <h1 className="text-display text-content-primary">شمارش معکوس</h1>
-        <p className="text-caption text-content-secondary">
-          {upcoming.length
-            ? `${toPersianDigits(upcoming.length)} رویداد در راه است`
-            : 'روزهایی که منتظرشان هستید.'}
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-display text-content-primary">شمارش معکوس</h1>
+          <p className="text-caption text-content-secondary">
+            {upcoming.length
+              ? `${toPersianDigits(upcoming.length)} رویداد در راه است`
+              : 'روزهایی که منتظرشان هستید.'}
+          </p>
+        </div>
+
+        <ScreenAddButton kind="countdown" label="رویداد تازه" />
       </header>
 
       {isLoading ? (
@@ -47,8 +52,8 @@ export function CountdownsScreen() {
         </div>
       ) : (countdowns?.length ?? 0) === 0 ? (
         <EmptyState
-          title="هنوز رویدادی ثبت نشده"
-          description="با دکمهٔ + یک تاریخ مهم اضافه کنید."
+          title="هنوز رویدادی در راه نیست"
+          description="یک تاریخ مهم اضافه کن تا روزشماری‌اش با تو باشد."
         />
       ) : (
         <>

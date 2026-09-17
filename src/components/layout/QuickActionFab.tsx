@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { usePathname } from 'next/navigation';
 import {
   BookMarked,
   CalendarClock,
@@ -28,6 +29,13 @@ import type { QuickActionKind } from '@/types/domain';
  *
  * Six actions is the ceiling for a two-column grid that still clears the
  * keyboard on a small phone; a seventh would push the last row under the fold.
+ *
+ * **Home only.** A floating button that follows you onto every screen has to
+ * mean something different on each one, and a control whose meaning changes
+ * under your thumb is a control you stop trusting. On Habits the right gesture
+ * is already "add a habit" from that screen's own header; the FAB would be a
+ * second, vaguer way to do the same thing. Here it means one thing — start
+ * something — and it means it in exactly one place.
  */
 
 interface QuickAction {
@@ -84,6 +92,7 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
 ] as const;
 
 export function QuickActionFab() {
+  const pathname = usePathname();
   const isOpen = useUiStore((state) => state.isQuickActionSheetOpen);
   const openQuickActions = useUiStore((state) => state.openQuickActions);
   const closeQuickActions = useUiStore((state) => state.closeQuickActions);
@@ -91,27 +100,33 @@ export function QuickActionFab() {
   const haptics = useHapticFeedback();
   const reduceMotion = usePrefersReducedMotion();
 
+  // The sheet still renders while it is open, so navigating away from home
+  // with it up does not rip it off the screen mid-animation.
+  if (pathname !== '/' && !isOpen) return null;
+
   return (
     <>
-      <motion.button
-        type="button"
-        aria-label={isOpen ? 'بستن افزودن' : 'افزودن'}
-        aria-expanded={isOpen}
-        onClick={() => {
-          haptics.impact('medium');
-          if (isOpen) closeQuickActions();
-          else openQuickActions();
-        }}
-        animate={reduceMotion ? undefined : { rotate: isOpen ? 45 : 0 }}
-        transition={{ type: 'spring', stiffness: 420, damping: 24 }}
-        className={cn(
-          'fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.25rem)] right-5 z-40',
-          'flex h-14 w-14 items-center justify-center rounded-full',
-          'bg-violet-gradient text-white shadow-fab active:scale-95',
-        )}
-      >
-        <Plus className="h-7 w-7" aria-hidden strokeWidth={2.4} />
-      </motion.button>
+      {pathname === '/' ? (
+        <motion.button
+          type="button"
+          aria-label={isOpen ? 'بستن افزودن' : 'افزودن'}
+          aria-expanded={isOpen}
+          onClick={() => {
+            haptics.impact('medium');
+            if (isOpen) closeQuickActions();
+            else openQuickActions();
+          }}
+          animate={reduceMotion ? undefined : { rotate: isOpen ? 45 : 0 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 24 }}
+          className={cn(
+            'fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.25rem)] right-5 z-40',
+            'flex h-14 w-14 items-center justify-center rounded-full',
+            'bg-violet-gradient text-white shadow-fab active:scale-95',
+          )}
+        >
+          <Plus className="h-7 w-7" aria-hidden strokeWidth={2.4} />
+        </motion.button>
+      ) : null}
 
       <Sheet
         open={isOpen}
