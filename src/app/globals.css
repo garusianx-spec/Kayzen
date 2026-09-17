@@ -176,6 +176,37 @@
     caret-color: rgb(var(--kz-text-primary));
   }
 
+  /* --- Brand mark safe zone ------------------------------------------------
+     The owl's silhouette is near-black by design, which is four percent of
+     luminance away from the dark surface. These two rules are what keep the
+     emblem from dissolving into the page; see `BrandMark.tsx` for why each
+     layer exists. Both are dark-theme only — on `#F8F7FC` the silhouette needs
+     no help, and a violet halo there is a smudge. */
+  .dark-aura {
+    background: radial-gradient(
+      circle closest-side,
+      rgb(var(--kz-violet) / 0.28),
+      rgb(var(--kz-violet) / 0.1) 55%,
+      transparent 78%
+    );
+  }
+
+  :root .dark-aura {
+    display: block;
+  }
+
+  [data-theme='light'] .dark-aura {
+    display: none;
+  }
+
+  .kz-logo-glow {
+    filter: drop-shadow(0 0 var(--kz-logo-glow-blur, 16px) rgb(var(--kz-violet) / 0.35));
+  }
+
+  [data-theme='light'] .kz-logo-glow {
+    filter: none;
+  }
+
   /* Numeric readouts (timer, OTP, amounts) must not shift width per digit. */
   .tabular {
     font-variant-numeric: tabular-nums;

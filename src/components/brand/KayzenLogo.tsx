@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 import { cn } from '@/lib/utils';
 
 import {
@@ -32,6 +34,8 @@ export interface KayzenLogoProps {
   /** Rendered height in pixels. Width follows from the artwork's proportions. */
   size?: number;
   className?: string;
+  /** Passed through for the contrast treatment in `BrandMark`. */
+  style?: CSSProperties;
   /**
    * Accessible name. Pass `null` when adjacent markup already names the app, so
    * a screen reader does not announce "Kayzen Kayzen".
@@ -51,6 +55,7 @@ export function KayzenLogo({
   variant = 'full',
   size = 28,
   className,
+  style,
   label = 'کایزن',
 }: KayzenLogoProps) {
   return (
@@ -59,6 +64,7 @@ export function KayzenLogo({
       height={size}
       width={size * LOGO_ASPECT[variant]}
       className={cn('block shrink-0', className)}
+      style={style}
       {...(label === null ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label })}
     >
       <defs>

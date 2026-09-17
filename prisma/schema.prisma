@@ -80,6 +80,42 @@ enum PomodoroMode {
   @@map("pomodoro_mode")
 }
 
+/// The five languages the daily vocabulary module delivers.
+enum LearningLanguage {
+  ENGLISH
+  TURKISH
+  FRENCH
+  GERMAN
+  SPANISH
+}
+
+/// Three tiers, named for the user in Persian as راحت / متوسط / سخت.
+enum LearningLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+/// Where a word stands for one learner. `LEARNING` is the default the day it
+/// is delivered; `MASTERED` is what the vault lists.
+enum VocabularyStatus {
+  LEARNING
+  REVIEWING
+  MASTERED
+}
+
+/// What a notification is about. Each one is a switch the user owns, which is
+/// why this is an enum rather than a free string: a category nobody can turn
+/// off is a category that will eventually be turned off by uninstalling.
+enum NotificationCategory {
+  TASK_REMINDER
+  HABIT_PROMPT
+  VOCABULARY
+  READING
+  FINANCIAL_MILESTONE
+  SYSTEM
+}
+
 enum OtpPurpose {
   SIGN_IN
   PHONE_CHANGE
@@ -132,6 +168,14 @@ model User {
   pomodoroSessions  PomodoroSession[]
   refreshTokens     RefreshToken[]
   pushSubscriptions PushSubscription[]
+  taskCategories    TaskCategory[]
+  taskChecklist     TaskChecklistItem[]
+  taskAttachments   TaskAttachment[]
+  languageCourses   LanguageCourse[]
+  vocabDeliveries   VocabularyDelivery[]
+  vocabMastery      VocabularyMastery[]
+  notificationPrefs NotificationPreference[]
+  notificationLogs  NotificationLog[]
 
   @@index([phone])
   @@map("users")
@@ -229,16 +273,94 @@ model Task {
   estimatedPomodoros Int?           @map("estimated_pomodoros")
   tags               String[]       @default([])
   position           Int            @default(0)
+  /// Money the task is expected to cost, in Toman. Optional, and deliberately
+  /// on the task rather than in the finance module: "buy a present" is one
+  /// thought, not a task plus a separate expense to remember to record.
+  costAmount         Decimal?       @map("cost_amount") @db.Decimal(14, 0)
+  /// Free text — "دفتر کار", "تهران", "خانهٔ مادر". Not geocoded: a place is a
+  /// reminder to the person, not a coordinate for the app.
+  location           String?        @db.VarChar(120)
+  /// When to fire the reminder. Null means the due date carries no alarm.
+  remindAt           DateTime?      @map("remind_at") @db.Timestamptz(6)
+  categoryId         String?        @map("category_id") @db.Uuid
   completedAt        DateTime?      @map("completed_at") @db.Timestamptz(6)
   createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category         TaskCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  checklist        TaskChecklistItem[]
+  attachments      TaskAttachment[]
   pomodoroSessions PomodoroSession[]
 
   @@index([userId, dueJalali])
   @@index([userId, status, priority])
+  @@index([userId, remindAt])
   @@map("tasks")
+}
+
+/// A user-owned, colour-coded label for tasks.
+///
+/// Its own table rather than a string on the task, because the brief asks for
+/// renaming and recolouring: doing that to a string means rewriting every row
+/// that happens to carry it, and missing the ones that were misspelled.
+model TaskCategory {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  title      String   @db.VarChar(40)
+  colorToken String   @default("violet") @map("color_token")
+  icon       String?
+  position   Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@unique([userId, title])
+  @@index([userId, position])
+  @@map("task_categories")
+}
+
+/// One line of a task's sub-task checklist.
+model TaskChecklistItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  taskId      String    @map("task_id") @db.Uuid
+  /// Denormalised so RLS can scope the row without joining `tasks`.
+  userId      String    @map("user_id") @db.Uuid
+  title       String    @db.VarChar(200)
+  position    Int       @default(0)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, position])
+  @@map("task_checklist_items")
+}
+
+/// A file attached to a task, stored in Supabase Storage.
+///
+/// Mirrors the note attachment layer: the row holds the object path and the
+/// application mints a short-lived signed URL on demand. The bytes never pass
+/// through the database.
+model TaskAttachment {
+  id         String   @id @default(uuid()) @db.Uuid
+  taskId     String   @map("task_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  /// `<user-uuid>/<task-uuid>/<filename>` inside the attachments bucket.
+  objectPath String   @unique @map("object_path")
+  fileName   String   @map("file_name") @db.VarChar(200)
+  mimeType   String   @map("mime_type") @db.VarChar(120)
+  sizeBytes  Int      @map("size_bytes")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_attachments")
 }
 
 // ---------------------------------------------------------------------------
@@ -455,4 +577,155 @@ model PomodoroSession {
 
   @@index([userId, startedAt])
   @@map("pomodoro_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Daily vocabulary
+// ---------------------------------------------------------------------------
+
+/// The shared word corpus: global reference data, like `Book365`.
+///
+/// One row per (language, level, term). Nothing here belongs to a user, which
+/// is what lets ten learners receive the same word on the same day without ten
+/// copies of it, and what makes the corpus editable in one place.
+model VocabularyWord {
+  id              String           @id @default(uuid()) @db.Uuid
+  language        LearningLanguage
+  level           LearningLevel
+  /// The word as written in the target language.
+  term            String           @db.VarChar(80)
+  /// Latin transliteration, for scripts a Persian reader cannot sound out.
+  transliteration String?          @map("transliteration") @db.VarChar(120)
+  /// Persian meaning. The whole module exists to get from `term` to this.
+  meaningFa       String           @map("meaning_fa") @db.VarChar(200)
+  partOfSpeech    String?          @map("part_of_speech") @db.VarChar(40)
+  /// One sentence using the word, and its Persian rendering.
+  example         String?          @db.VarChar(300)
+  exampleFa       String?          @map("example_fa") @db.VarChar(300)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  deliveries VocabularyDelivery[]
+  mastery    VocabularyMastery[]
+
+  @@unique([language, level, term])
+  @@index([language, level])
+  @@map("vocabulary_words")
+}
+
+/// One language a user is actively learning, at one level.
+///
+/// The brief allows one to three at a time; that ceiling is enforced in the
+/// application rather than the schema, because "three" is a product decision
+/// and a unique index cannot express it without inventing a slot number.
+model LanguageCourse {
+  id          String           @id @default(uuid()) @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  language    LearningLanguage
+  level       LearningLevel    @default(BEGINNER)
+  /// How many new words a day. Ten is the brief's default and the cap.
+  wordsPerDay Int              @default(10) @map("words_per_day")
+  archivedAt  DateTime?        @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries VocabularyDelivery[]
+
+  @@unique([userId, language])
+  @@index([userId, archivedAt])
+  @@map("language_courses")
+}
+
+/// A word handed to a learner on a particular day.
+///
+/// Persisted rather than recomputed so that yesterday's ten words stay
+/// yesterday's ten words after the corpus grows — the selection is
+/// deterministic, but determinism over a changing corpus is not stability.
+model VocabularyDelivery {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  courseId  String   @map("course_id") @db.Uuid
+  wordId    String   @map("word_id") @db.Uuid
+  /// Jalali day key in the learner's timezone, e.g. "1405-06-26".
+  dayKey    String   @map("day_key") @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course LanguageCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  word   VocabularyWord @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, dayKey, wordId])
+  @@index([userId, dayKey])
+  @@map("vocabulary_deliveries")
+}
+
+/// What a learner knows, and how well.
+///
+/// Separate from the delivery because they answer different questions: a
+/// delivery is "what did you see on Tuesday", mastery is "do you know it now".
+model VocabularyMastery {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  wordId         String           @map("word_id") @db.Uuid
+  status         VocabularyStatus @default(LEARNING)
+  /// Consecutive correct reviews. Drives the flashcard scheduler.
+  correctRuns    Int              @default(0) @map("correct_runs")
+  reviewCount    Int              @default(0) @map("review_count")
+  lastReviewedAt DateTime?        @map("last_reviewed_at") @db.Timestamptz(6)
+  masteredAt     DateTime?        @map("mastered_at") @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word VocabularyWord @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, wordId])
+  @@index([userId, status])
+  @@map("vocabulary_mastery")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+/// One switch per category per user.
+///
+/// A row exists only once the user has expressed a preference; the absence of
+/// one means "the default for this category", which keeps a new account from
+/// needing six inserts before it can be notified about anything.
+model NotificationPreference {
+  id        String               @id @default(uuid()) @db.Uuid
+  userId    String               @map("user_id") @db.Uuid
+  category  NotificationCategory
+  enabled   Boolean              @default(true)
+  updatedAt DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("notification_preferences")
+}
+
+/// Everything the app has told this user, newest first.
+///
+/// `deepLink` is an in-app path rather than a record id, so the history keeps
+/// working when the thing it points at is deleted: a 404 inside the app is a
+/// better outcome than a tap that does nothing.
+model NotificationLog {
+  id        String               @id @default(uuid()) @db.Uuid
+  userId    String               @map("user_id") @db.Uuid
+  category  NotificationCategory
+  title     String               @db.VarChar(120)
+  body      String               @db.VarChar(400)
+  /// e.g. "/tasks?task=<uuid>" or "/tools/vocabulary".
+  deepLink  String?              @map("deep_link") @db.VarChar(300)
+  readAt    DateTime?            @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notification_logs")
 }

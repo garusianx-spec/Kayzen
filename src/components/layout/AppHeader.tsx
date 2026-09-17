@@ -4,7 +4,7 @@ import { Settings } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { KayzenLogo } from '@/components/brand/KayzenLogo';
+import { BrandMark } from '@/components/brand/BrandMark';
 import { useHapticFeedback } from '@/hooks/use-haptic-feedback';
 import { NAV_ITEMS } from './BottomNav';
 
@@ -38,10 +38,10 @@ export function AppHeader() {
           aria-label="کایزن — رفتن به امروز"
         >
           {isHome ? (
-            <KayzenLogo variant="full" size={32} label={null} className="text-foreground" />
+            <BrandMark variant="full" size={32} label={null} className="text-foreground" />
           ) : (
             <>
-              <KayzenLogo variant="mark" size={28} label={null} />
+              <BrandMark variant="mark" size={28} label={null} />
               <span className="truncate text-title text-foreground">{section?.label}</span>
             </>
           )}
