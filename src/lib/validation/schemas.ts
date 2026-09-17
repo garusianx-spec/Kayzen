@@ -230,6 +230,20 @@ export type DeleteAttachmentInput = z.infer<typeof deleteAttachmentSchema>;
 export const taskStatusSchema = z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'ARCHIVED']);
 export const taskDifficultySchema = z.enum(['TRIVIAL', 'EASY', 'MEDIUM', 'HARD', 'EPIC']);
 
+/**
+ * One sub-task.
+ *
+ * `id` is present when the client is editing a line it already knows about, so
+ * that ticking one off does not orphan the rest. The API replaces the whole
+ * list on every write — a checklist is short, it is always edited as a unit,
+ * and per-item endpoints would buy nothing but a reconciliation bug.
+ */
+export const checklistItemSchema = z.object({
+  id: z.string().uuid().optional(),
+  title: persianText(200),
+  completed: z.boolean().default(false),
+});
+
 export const createTaskSchema = z.object({
   title: persianText(200),
   description: z.string().max(4000).optional(),
@@ -243,6 +257,19 @@ export const createTaskSchema = z.object({
     .optional(),
   estimatedPomodoros: z.coerce.number().int().min(1).max(24).optional(),
   tags: z.array(z.string().max(32)).max(10).default([]),
+  categoryId: z.string().uuid().nullish(),
+  /**
+   * Expected cost in Toman, whole units.
+   *
+   * Through `persianNumber`, so `۲٬۵۰۰٬۰۰۰` typed on a Persian keyboard is the
+   * same value as `2500000` — the separator and the digits both normalise.
+   */
+  costAmount: persianNumber
+    .pipe(z.number().int().min(0, 'هزینه نمی‌تواند منفی باشد.').max(1e13))
+    .nullish(),
+  location: z.string().trim().max(120).nullish(),
+  remindAt: isoDateTime.nullish(),
+  checklist: z.array(checklistItemSchema).max(30).optional(),
 });
 
 export const updateTaskSchema = createTaskSchema
@@ -259,6 +286,22 @@ export const listTasksSchema = z.object({
   scope: z.enum(['today', 'upcoming', 'overdue', 'all']).default('all'),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+export const taskCategorySchema = z.object({
+  title: persianText(40),
+  colorToken: z.enum(['violet', 'flame', 'emerald', 'rose', 'sky']).default('violet'),
+  icon: z.string().max(40).optional(),
+});
+
+export const updateTaskCategorySchema = taskCategorySchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'حداقل یک فیلد برای به‌روزرسانی لازم است.',
+  });
+
+export type TaskCategoryInput = z.infer<typeof taskCategorySchema>;
+export type UpdateTaskCategoryInput = z.infer<typeof updateTaskCategorySchema>;
+export type ChecklistItemInput = z.infer<typeof checklistItemSchema>;
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;

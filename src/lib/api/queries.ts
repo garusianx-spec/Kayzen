@@ -17,6 +17,7 @@ import type {
   NoteDto,
   ReadingLogDto,
   SessionUserDto,
+  TaskCategoryDto,
   TaskDto,
   TodaySnapshotDto,
 } from '@/types/domain';
@@ -39,6 +40,7 @@ export const queryKeys = {
   session: ['session'] as const,
   today: ['today'] as const,
   tasks: (scope: string = 'all') => ['tasks', scope] as const,
+  taskCategories: ['tasks', 'categories'] as const,
   habits: ['habits'] as const,
   financeBoxes: ['finance', 'boxes'] as const,
   financeTransactions: (boxId?: string) => ['finance', 'transactions', boxId ?? 'all'] as const,
@@ -110,6 +112,12 @@ export interface CreateTaskVariables {
   tags?: string[];
   estimatedPomodoros?: number;
   recurrence?: string;
+  categoryId?: string | null;
+  /** Toman, whole units. `null` clears an existing value on an edit. */
+  costAmount?: number | null;
+  location?: string | null;
+  remindAt?: string | null;
+  checklist?: Array<{ id?: string; title: string; completed: boolean }>;
 }
 
 export function useCreateTask() {
@@ -128,6 +136,58 @@ export function useCreateTask() {
 }
 
 /** Toggles completion, optimistically, across both the Today snapshot and lists. */
+/**
+ * The user's task labels.
+ *
+ * Long `staleTime`: a person edits these a handful of times a year, and the
+ * composer opens often enough that refetching the list on every open would be
+ * a request per tap for data that has not moved.
+ */
+export function useTaskCategories() {
+  return useQuery({
+    queryKey: queryKeys.taskCategories,
+    queryFn: async () => {
+      const result = await api.get<{ categories: TaskCategoryDto[] }>('/tasks/categories');
+      return result.categories;
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useCreateTaskCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: { title: string; colorToken?: string }) =>
+      api.post<{ category: TaskCategoryDto }>('/tasks/categories', variables),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskCategories });
+    },
+  });
+}
+
+/**
+ * Edits an existing task.
+ *
+ * Distinct from `useToggleTask`, which is the optimistic single-field path the
+ * list uses; this one is the composer saving a whole form and is happy to wait
+ * for the server, because the form is still on screen to show an error.
+ */
+export function useUpdateTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string } & Partial<CreateTaskVariables>) =>
+      api.patch<{ task: TaskDto } | QueuedResult>(`/tasks/${id}`, patch, {
+        queueWhenOffline: { label: 'ویرایش کار', invalidate: ['today', 'tasks'] },
+      }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+}
+
 export function useToggleTask() {
   const queryClient = useQueryClient();
 

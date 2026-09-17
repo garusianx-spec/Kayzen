@@ -7,6 +7,9 @@ import type {
   Note,
   PomodoroSession,
   Task,
+  TaskAttachment,
+  TaskCategory,
+  TaskChecklistItem,
   User,
   UserReadingLog,
 } from '@prisma/client';
@@ -26,8 +29,16 @@ import type {
   PomodoroSessionDto,
   ReadingLogDto,
   SessionUserDto,
+  TaskCategoryDto,
   TaskDto,
 } from '@/types/domain';
+
+/** A task row, optionally joined with the detail the composer edits. */
+export type TaskWithDetail = Task & {
+  category?: TaskCategory | null;
+  checklist?: TaskChecklistItem[];
+  attachments?: TaskAttachment[];
+};
 
 /**
  * Prisma row → wire shape.
@@ -73,7 +84,17 @@ export function toSessionUserDto(user: User): SessionUserDto {
   };
 }
 
-export function toTaskDto(task: Task, now: Date = new Date()): TaskDto {
+/**
+ * A task, with whatever detail was loaded alongside it.
+ *
+ * The relations are optional on the input because most screens list tasks
+ * without them: a day view that eagerly joined every checklist and attachment
+ * would pay for detail nobody is looking at. When they are absent the DTO
+ * reports empty rather than undefined, so the client never has to distinguish
+ * "no sub-tasks" from "not loaded" — the only two states a list renders the
+ * same way anyway.
+ */
+export function toTaskDto(task: TaskWithDetail, now: Date = new Date()): TaskDto {
   return {
     id: task.id,
     title: task.title,
@@ -94,6 +115,33 @@ export function toTaskDto(task: Task, now: Date = new Date()): TaskDto {
       task.dueAt < now &&
       task.status !== 'COMPLETED' &&
       task.status !== 'ARCHIVED',
+    costAmount: task.costAmount === null ? null : Number(task.costAmount),
+    location: task.location,
+    remindAt: task.remindAt?.toISOString() ?? null,
+    category: task.category ? toTaskCategoryDto(task.category) : null,
+    checklist: (task.checklist ?? []).map((item) => ({
+      id: item.id,
+      title: item.title,
+      completed: item.completedAt !== null,
+      position: item.position,
+    })),
+    attachments: (task.attachments ?? []).map((file) => ({
+      id: file.id,
+      fileName: file.fileName,
+      mimeType: file.mimeType,
+      sizeBytes: file.sizeBytes,
+      createdAt: file.createdAt.toISOString(),
+    })),
+  };
+}
+
+export function toTaskCategoryDto(category: TaskCategory): TaskCategoryDto {
+  return {
+    id: category.id,
+    title: category.title,
+    colorToken: category.colorToken,
+    icon: category.icon,
+    position: category.position,
   };
 }
 

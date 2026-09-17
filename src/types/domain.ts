@@ -66,6 +66,29 @@ export interface SessionUserDto {
   hasPassword: boolean;
 }
 
+export interface TaskChecklistItemDto {
+  id: string;
+  title: string;
+  completed: boolean;
+  position: number;
+}
+
+export interface TaskCategoryDto {
+  id: string;
+  title: string;
+  colorToken: string;
+  icon: string | null;
+  position: number;
+}
+
+export interface TaskAttachmentDto {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export interface TaskDto {
   id: string;
   title: string;
@@ -83,6 +106,13 @@ export interface TaskDto {
   createdAt: string;
   /** True when `dueAt` is in the past and the task is still open. */
   isOverdue: boolean;
+  /** Expected cost in Toman, whole units. */
+  costAmount: number | null;
+  location: string | null;
+  remindAt: string | null;
+  category: TaskCategoryDto | null;
+  checklist: TaskChecklistItemDto[];
+  attachments: TaskAttachmentDto[];
 }
 
 export interface HabitDto {

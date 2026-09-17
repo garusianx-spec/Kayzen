@@ -294,14 +294,8 @@ function applyDefaults(model: Model, data: Row): Row {
   }
 
   for (const field of model.fields) {
-    if (field.kind === 'object') {
-      if (row[field.name] !== undefined) {
-        throw new Error(
-          `memory database: nested writes through ${model.name}.${field.name} are not implemented`,
-        );
-      }
-      continue;
-    }
+    // Relation keys are lifted out by `splitNestedWrites` before this runs.
+    if (field.kind === 'object') continue;
 
     if (field.isUpdatedAt) {
       row[field.name] = new Date();
@@ -358,11 +352,7 @@ function applyUpdate(model: Model, row: Row, data: Row): Row {
 
     const field = fields.get(key);
     if (!field) throw new Error(`memory database: unknown field ${model.name}.${key}`);
-    if (field.kind === 'object') {
-      throw new Error(
-        `memory database: nested writes through ${model.name}.${key} are not implemented`,
-      );
-    }
+    if (field.kind === 'object') continue;
 
     if (
       typeof value === 'object' &&
@@ -399,6 +389,35 @@ function applyUpdate(model: Model, row: Row, data: Row): Row {
   }
 
   return next;
+}
+
+/**
+ * Separates a write's own columns from writes through its relations.
+ *
+ * Prisma lets one call create a task and its checklist together. The store
+ * keeps one array per model, so the nested half is applied as a second pass
+ * once the parent exists and its id is known.
+ */
+function splitNestedWrites(
+  model: Model,
+  data: Row,
+): { own: Row; nested: Array<{ field: Field; operations: Row }> } {
+  const fields = fieldsOf(model);
+  const own: Row = {};
+  const nested: Array<{ field: Field; operations: Row }> = [];
+
+  for (const [key, value] of Object.entries(data)) {
+    const field = fields.get(key);
+
+    if (field?.kind === 'object' && value !== undefined) {
+      nested.push({ field, operations: value as Row });
+      continue;
+    }
+
+    own[key] = value;
+  }
+
+  return { own, nested };
 }
 
 // --- reads ------------------------------------------------------------------
@@ -557,12 +576,76 @@ export class MemoryStore {
     args: { data: Row; select?: Record<string, unknown>; include?: Record<string, unknown> },
   ): Row {
     const model = modelOrThrow(modelName);
-    const row = applyDefaults(model, args.data);
+    const { own, nested } = splitNestedWrites(model, args.data);
+    const row = applyDefaults(model, own);
 
     this.assertUnique(model, row, null);
     this.rows(modelName).push(row);
 
+    for (const write of nested) this.applyNested(model, row, write.field, write.operations);
+
     return this.project(modelName, row, args);
+  }
+
+  /**
+   * The nested write forms this application issues, and no others.
+   *
+   * `createMany` and `deleteMany` are what "replace this child list" compiles
+   * to; `create` is the single-child form. Anything else throws, for the same
+   * reason an unknown filter does: a nested write that is quietly ignored looks
+   * exactly like one that worked.
+   */
+  private applyNested(parent: Model, row: Row, field: Field, operations: Row): void {
+    const target = modelOrThrow(field.type);
+    const back = target.fields.find(
+      (candidate) =>
+        candidate.relationName === field.relationName &&
+        candidate.relationFromFields &&
+        candidate.relationFromFields.length > 0,
+    );
+
+    if (!back) {
+      throw new Error(
+        `memory database: cannot write ${parent.name}.${field.name} — no owning side found`,
+      );
+    }
+
+    const link = Object.fromEntries(
+      (back.relationFromFields ?? []).map((foreign, index) => [
+        foreign,
+        row[(back.relationToFields ?? [])[index] as string],
+      ]),
+    );
+
+    for (const [operation, payload] of Object.entries(operations)) {
+      if (payload === undefined) continue;
+
+      switch (operation) {
+        case 'deleteMany':
+          this.deleteMany(target.name, {
+            where: { ...link, ...(payload as { where?: Where }).where },
+          });
+          break;
+        case 'createMany': {
+          const rows = (payload as { data?: Row | Row[] }).data ?? [];
+          for (const child of Array.isArray(rows) ? rows : [rows]) {
+            this.create(target.name, { data: { ...child, ...link } });
+          }
+          break;
+        }
+        case 'create': {
+          const rows = payload as Row | Row[];
+          for (const child of Array.isArray(rows) ? rows : [rows]) {
+            this.create(target.name, { data: { ...child, ...link } });
+          }
+          break;
+        }
+        default:
+          throw new Error(
+            `memory database: nested "${operation}" on ${parent.name}.${field.name} is not implemented`,
+          );
+      }
+    }
   }
 
   update(
@@ -579,9 +662,12 @@ export class MemoryStore {
     const index = rows.findIndex((row) => matchesWhere(row, args.where, model));
     if (index < 0) return null;
 
-    const next = applyUpdate(model, rows[index] as Row, args.data);
+    const { own, nested } = splitNestedWrites(model, args.data);
+    const next = applyUpdate(model, rows[index] as Row, own);
     this.assertUnique(model, next, rows[index] as Row);
     rows[index] = next;
+
+    for (const write of nested) this.applyNested(model, next, write.field, write.operations);
 
     return this.project(modelName, next, args);
   }

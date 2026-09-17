@@ -1,4 +1,5 @@
 import { toTaskDto } from '@/lib/api/dto';
+import { TASK_DETAIL_INCLUDE, checklistWrite } from '@/lib/domain/task-detail';
 import { withAuthedRoute } from '@/lib/api/handler';
 import { toJalaliDayKey } from '@/lib/date/jalali';
 import { ApiError } from '@/lib/errors';
@@ -18,7 +19,10 @@ export const PATCH = withAuthedRoute<UpdateTaskInput, undefined, { task: TaskDto
 
     // RLS would already hide another tenant's row, but reading first turns a
     // cross-tenant write into a clean 404 instead of a Prisma exception.
-    const existing = await db.task.findUnique({ where: { id } });
+    const existing = await db.task.findUnique({
+      where: { id },
+      include: { checklist: { select: { id: true, completedAt: true } } },
+    });
     if (!existing) throw ApiError.notFound('کار موردنظر پیدا نشد.');
 
     const completing = body.status === 'COMPLETED' && existing.status !== 'COMPLETED';
@@ -45,9 +49,24 @@ export const PATCH = withAuthedRoute<UpdateTaskInput, undefined, { task: TaskDto
           : {}),
         ...(body.tags !== undefined ? { tags: body.tags } : {}),
         ...(body.position !== undefined ? { position: body.position } : {}),
+        ...(body.categoryId !== undefined ? { categoryId: body.categoryId } : {}),
+        ...(body.costAmount !== undefined ? { costAmount: body.costAmount } : {}),
+        ...(body.location !== undefined ? { location: body.location } : {}),
+        ...(body.remindAt !== undefined ? { remindAt: body.remindAt } : {}),
         ...(completing ? { completedAt: new Date() } : {}),
         ...(body.status !== undefined && body.status !== 'COMPLETED' ? { completedAt: null } : {}),
+        // Replaced wholesale — see `checklistWrite` for why, and for how a
+        // line that was already ticked keeps the moment it was ticked.
+        ...(body.checklist !== undefined
+          ? {
+              checklist: {
+                deleteMany: {},
+                createMany: { data: checklistWrite(body.checklist, existing.checklist, user.id) },
+              },
+            }
+          : {}),
       },
+      include: TASK_DETAIL_INCLUDE,
     });
 
     return { task: toTaskDto(task) };

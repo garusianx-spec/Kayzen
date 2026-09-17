@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
 import { toTaskDto } from '@/lib/api/dto';
+import { TASK_DETAIL_INCLUDE, checklistWrite } from '@/lib/domain/task-detail';
 import { withAuthedRoute } from '@/lib/api/handler';
 import { toJalaliDayKey } from '@/lib/date/jalali';
 import {
@@ -53,6 +54,7 @@ export const GET = withAuthedRoute<undefined, ListTasksQuery, { tasks: TaskDto[]
       where,
       orderBy: [{ status: 'asc' }, { priority: 'asc' }, { position: 'asc' }, { createdAt: 'desc' }],
       take: query.limit,
+      include: TASK_DETAIL_INCLUDE,
     });
 
     return { tasks: tasks.map((task) => toTaskDto(task, now)) };
@@ -85,7 +87,15 @@ export const POST = withAuthedRoute<CreateTaskInput, undefined, { task: TaskDto 
         estimatedPomodoros: body.estimatedPomodoros ?? null,
         tags: body.tags,
         position: (first?.position ?? 0) - 1,
+        categoryId: body.categoryId ?? null,
+        costAmount: body.costAmount ?? null,
+        location: body.location ?? null,
+        remindAt: body.remindAt ?? null,
+        ...(body.checklist?.length
+          ? { checklist: { createMany: { data: checklistWrite(body.checklist, [], user.id) } } }
+          : {}),
       },
+      include: TASK_DETAIL_INCLUDE,
     });
 
     return { task: toTaskDto(task) };
