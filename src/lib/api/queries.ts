@@ -16,6 +16,8 @@ import type {
   HabitDto,
   NoteDto,
   ReadingLogDto,
+  ReadingPlanDto,
+  ReadingRhythmDto,
   SessionUserDto,
   LanguageCourseDto,
   NotificationDto,
@@ -24,6 +26,7 @@ import type {
   VocabularyVaultGroup,
   TaskDto,
   TodaySnapshotDto,
+  UserBookDto,
 } from '@/types/domain';
 
 /**
@@ -55,6 +58,7 @@ export const queryKeys = {
   countdowns: ['countdowns'] as const,
   notes: (search: string = '') => ['notes', search] as const,
   libraryToday: ['library', 'today'] as const,
+  readingHub: ['library', 'hub'] as const,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -756,6 +760,163 @@ export function useSaveReadingLog() {
         variables,
         { queueWhenOffline: { label: 'یادداشت کتاب', invalidate: ['library', 'today'] } },
       ),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ['library'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today });
+    },
+  });
+}
+
+/**
+ * The Reading Hub's one query.
+ *
+ * Plan, rhythm and shelf arrive together because they are drawn together;
+ * every mutation below writes its fresh copy straight into this cache rather
+ * than invalidating, so the ring moves on the same frame as the button that
+ * moved it.
+ */
+export function useReadingHub(): UseQueryResult<ReadingHubSnapshot> {
+  return useQuery({
+    queryKey: queryKeys.readingHub,
+    queryFn: () => api.get<ReadingHubSnapshot>('/library/hub'),
+    staleTime: 60 * 1000,
+  });
+}
+
+export interface ReadingHubSnapshot {
+  plan: ReadingPlanDto;
+  rhythm: ReadingRhythmDto;
+  books: UserBookDto[];
+}
+
+/**
+ * Switching mode or duration, optimistically.
+ *
+ * Both are one-tap segmented controls, and a segmented control that waits for
+ * a round trip before moving reads as broken rather than as slow. The cost of
+ * being wrong is one chip in the wrong place until the next refetch.
+ */
+export function useUpdateReadingPlan() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: Partial<ReadingPlanDto>) =>
+      api.patch<{ plan: ReadingPlanDto }>('/library/plan', variables),
+
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.readingHub });
+      const previous = queryClient.getQueryData<ReadingHubSnapshot>(queryKeys.readingHub);
+
+      if (previous) {
+        queryClient.setQueryData<ReadingHubSnapshot>(queryKeys.readingHub, {
+          ...previous,
+          plan: { ...previous.plan, ...variables },
+        });
+      }
+
+      return { previous };
+    },
+
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.readingHub, context.previous);
+      }
+    },
+
+    // The goal ring and every `metGoal` flag are computed against the
+    // duration, so changing it invalidates more than the chip that changed.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.readingHub }),
+  });
+}
+
+export function useAddBook() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: {
+      title: string;
+      author?: string;
+      totalPages: number;
+      currentPage?: number;
+      colorToken?: string;
+    }) => api.post<{ book: UserBookDto }>('/library/books', variables),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.readingHub }),
+  });
+}
+
+export function useUpdateBook() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...patch
+    }: { id: string } & Partial<UserBookDto> & { finished?: boolean }) =>
+      api.patch<{ book: UserBookDto }>(`/library/books/${id}`, patch),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.readingHub }),
+  });
+}
+
+export function useDeleteBook() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ id: string }>(`/library/books/${id}`),
+
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.readingHub });
+      const previous = queryClient.getQueryData<ReadingHubSnapshot>(queryKeys.readingHub);
+
+      if (previous) {
+        queryClient.setQueryData<ReadingHubSnapshot>(queryKeys.readingHub, {
+          ...previous,
+          books: previous.books.filter((book) => book.id !== id),
+        });
+      }
+
+      return { previous };
+    },
+
+    onError: (_error, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.readingHub, context.previous);
+      }
+    },
+
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.readingHub }),
+  });
+}
+
+/**
+ * Logging a sitting.
+ *
+ * The response already carries the recomputed rhythm and the advanced book, so
+ * it is written straight into the cache — no refetch, and the ring, the streak
+ * and the page count all move together.
+ */
+export function useLogReadingSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (variables: { minutes: number; bookId?: string; toPage?: number }) =>
+      api.post<{ rhythm: ReadingRhythmDto; book: UserBookDto | null }>(
+        '/library/sessions',
+        variables,
+      ),
+
+    onSuccess: (result) => {
+      const previous = queryClient.getQueryData<ReadingHubSnapshot>(queryKeys.readingHub);
+      if (!previous) return;
+
+      queryClient.setQueryData<ReadingHubSnapshot>(queryKeys.readingHub, {
+        ...previous,
+        rhythm: result.rhythm,
+        books: result.book
+          ? previous.books.map((book) => (book.id === result.book?.id ? result.book : book))
+          : previous.books,
+      });
+    },
+
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['library'] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });

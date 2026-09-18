@@ -59,8 +59,8 @@ const TOOLS: readonly Tool[] = [
   },
   {
     href: '/library',
-    label: 'کتابخانهٔ ۳۶۵',
-    description: 'هر روز یک خلاصه',
+    label: 'مرکز مطالعه',
+    description: 'خلاصهٔ روزانه یا کتاب خودت',
     icon: BookOpen,
     tone: 'bg-emerald-soft text-emerald',
   },

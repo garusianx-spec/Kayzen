@@ -107,6 +107,21 @@ enum VocabularyStatus {
 /// What a notification is about. Each one is a switch the user owns, which is
 /// why this is an enum rather than a free string: a category nobody can turn
 /// off is a category that will eventually be turned off by uninstalling.
+/**
+ * Which half of the Reading Hub a person is using.
+ * Not a per-book setting: it is the question "what does reading mean to me
+ * right now", and somebody who is 200 pages into a novel does not want the
+ * daily micro-summary competing for the same fifteen minutes.
+ */
+enum ReadingMode {
+  /// The curated 365-day micro-summary curriculum.
+  SUMMARY
+  /// A book of the person's own, tracked by pages.
+  FULL_BOOK
+
+  @@map("reading_mode")
+}
+
 enum NotificationCategory {
   TASK_REMINDER
   HABIT_PROMPT
@@ -181,6 +196,9 @@ model User {
   vocabMastery      VocabularyMastery[]
   notificationPrefs NotificationPreference[]
   notificationLogs  NotificationLog[]
+  readingPlan       ReadingPlan?
+  books             UserBook[]
+  readingSessions   ReadingSession[]
 
   @@index([phone])
   @@map("users")
@@ -560,6 +578,82 @@ model UserReadingLog {
   @@unique([userId, bookId])
   @@index([userId, dayNumber])
   @@map("user_reading_logs")
+}
+
+/// --------------------------------------------------------------------------
+/// Reading Hub
+/// --------------------------------------------------------------------------
+
+/// One row per account: how long they read for, and which mode they are in.
+///
+/// Separate from `User` rather than two more columns on it because the pair is
+/// only ever read together, only by the library, and a person who never opens
+/// the Reading Hub should not carry its defaults as if they had chosen them.
+model ReadingPlan {
+  id           String      @id @default(uuid()) @db.Uuid
+  userId       String      @unique @map("user_id") @db.Uuid
+  mode         ReadingMode @default(SUMMARY)
+  /// The daily commitment in minutes. Constrained to 15, 30 or 60 — see
+  /// `src/lib/domain/reading-plan.ts` for why it is a choice of three.
+  dailyMinutes Int         @default(15) @map("daily_minutes")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reading_plans")
+}
+
+/// A book the person is reading themselves, tracked by page.
+///
+/// Pages rather than percent: a reader knows what page they stopped on, and
+/// asking them to estimate a percentage is asking them to do arithmetic to
+/// record something they already know exactly.
+model UserBook {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  title       String    @db.VarChar(200)
+  author      String?   @db.VarChar(160)
+  totalPages  Int       @map("total_pages")
+  currentPage Int       @default(0) @map("current_page")
+  /// A palette token, so a shelf of books is distinguishable at a glance
+  /// without anybody having to find a cover image.
+  colorToken  String    @default("violet") @map("color_token") @db.VarChar(20)
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions ReadingSession[]
+
+  @@index([userId, finishedAt])
+  @@map("user_books")
+}
+
+/// Minutes read on one day.
+///
+/// `bookId` is null for a session logged against the 365 curriculum, which is
+/// what lets one streak and one "minutes today" ring serve both modes: the
+/// question "did I read today" has the same answer whichever half answered it.
+model ReadingSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  bookId    String?  @map("book_id") @db.Uuid
+  /// Jalali day key ("1403-06-24") in the reader's timezone, so "today" is a
+  /// plain index lookup rather than a per-row timezone conversion.
+  dayKey    String   @map("day_key") @db.VarChar(10)
+  minutes   Int
+  /// Pages covered in this sitting. Zero in summary mode.
+  pagesRead Int      @default(0) @map("pages_read")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book UserBook? @relation(fields: [bookId], references: [id], onDelete: SetNull)
+
+  @@index([userId, dayKey])
+  @@index([bookId])
+  @@map("reading_sessions")
 }
 
 // ---------------------------------------------------------------------------

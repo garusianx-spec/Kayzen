@@ -1,4 +1,4 @@
-import type { Book365 } from '@prisma/client';
+import type { Book365, ReadingPlan } from '@prisma/client';
 
 import type { ScopedPrisma } from '../db/rls';
 import { CURRICULUM_LENGTH, resolveCurriculumPosition, type CurriculumPosition } from './books-365';
@@ -70,4 +70,20 @@ export async function resolveDailyAssignment(
 
   const { book, isReviewDay } = await resolveBookForDay(db, position.dayNumber);
   return { position, book, isReviewDay };
+}
+
+/**
+ * The account's reading plan, created on first sight.
+ *
+ * Lazily rather than at sign-up: a plan row is a record that somebody has
+ * opened the Reading Hub and been offered a commitment, and writing one for
+ * every account at registration would make "has a plan" useless as a signal —
+ * and would bake today's defaults into accounts that never asked for them.
+ */
+export async function ensureReadingPlan(db: ScopedPrisma, userId: string): Promise<ReadingPlan> {
+  return db.readingPlan.upsert({
+    where: { userId },
+    update: {},
+    create: { userId },
+  });
 }

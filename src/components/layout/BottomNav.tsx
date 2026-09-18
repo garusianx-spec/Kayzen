@@ -37,7 +37,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/habits', label: 'عادت‌ها', icon: Flame },
   { href: '/tools', label: 'ابزارها', icon: LayoutGrid },
   { href: '/finance', label: 'مالی', icon: Wallet },
-  { href: '/library', label: 'کتابخانه', icon: BookOpen },
+  { href: '/library', label: 'مطالعه', icon: BookOpen },
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {

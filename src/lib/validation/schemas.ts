@@ -543,6 +543,81 @@ export const upsertReadingLogSchema = z.object({
 export type UpsertReadingLogInput = z.infer<typeof upsertReadingLogSchema>;
 
 // ---------------------------------------------------------------------------
+// Reading Hub — the plan, the shelf, the sittings
+// ---------------------------------------------------------------------------
+
+/**
+ * `dailyMinutes` is an enum, not a bounded integer.
+ *
+ * The picker offers three chips and the database has a CHECK constraint naming
+ * the same three; a schema that accepted `17` would let a client write a plan
+ * the UI cannot draw and the column will reject, which is two failures where
+ * there should be one message.
+ */
+export const readingDurationSchema = z.union(
+  [z.literal(15), z.literal(30), z.literal(60)],
+  // Without this the union reports zod's English default, which would be the
+  // one untranslated string in an otherwise Persian error envelope.
+  { errorMap: () => ({ message: 'مدت مطالعه باید ۱۵، ۳۰ یا ۶۰ دقیقه باشد.' }) },
+);
+
+export const readingModeSchema = z.enum(['SUMMARY', 'FULL_BOOK']);
+
+export const updateReadingPlanSchema = z
+  .object({
+    mode: readingModeSchema.optional(),
+    dailyMinutes: z.coerce.number().int().pipe(readingDurationSchema).optional(),
+  })
+  .refine((value) => value.mode !== undefined || value.dailyMinutes !== undefined, {
+    message: 'چیزی برای تغییر نفرستادید.',
+  });
+
+export const createBookSchema = z.object({
+  title: z.string().trim().min(1, 'نام کتاب لازم است.').max(200),
+  author: z.string().trim().max(160).optional(),
+  totalPages: z.coerce
+    .number()
+    .int()
+    .min(1, 'تعداد صفحه باید بیشتر از صفر باشد.')
+    .max(20_000, 'این عدد برای یک کتاب خیلی بزرگ است.'),
+  currentPage: z.coerce.number().int().min(0).max(20_000).default(0),
+  colorToken: z.enum(['violet', 'flame', 'emerald', 'rose', 'sky']).default('violet'),
+});
+
+export const updateBookSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    author: z.string().trim().max(160).nullable().optional(),
+    totalPages: z.coerce.number().int().min(1).max(20_000).optional(),
+    currentPage: z.coerce.number().int().min(0).max(20_000).optional(),
+    colorToken: z.enum(['violet', 'flame', 'emerald', 'rose', 'sky']).optional(),
+    /// `true` shelves the book as finished, `false` reopens it.
+    finished: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'چیزی برای تغییر نفرستادید.',
+  });
+
+/**
+ * One sitting.
+ *
+ * `toPage` is where the reader *got to*, not how far they went: that is the
+ * number they can read off the open book without arithmetic. The server turns
+ * it into a delta against the stored bookmark, which also means two sessions
+ * logged out of order cannot inflate the total.
+ */
+export const logReadingSessionSchema = z.object({
+  minutes: z.coerce.number().int().min(1, 'دقیقه‌ها را وارد کنید.').max(1440),
+  bookId: uuidSchema.optional(),
+  toPage: z.coerce.number().int().min(0).max(20_000).optional(),
+});
+
+export type UpdateReadingPlanInput = z.infer<typeof updateReadingPlanSchema>;
+export type CreateBookInput = z.infer<typeof createBookSchema>;
+export type UpdateBookInput = z.infer<typeof updateBookSchema>;
+export type LogReadingSessionInput = z.infer<typeof logReadingSessionSchema>;
+
+// ---------------------------------------------------------------------------
 // Pomodoro & preferences
 // ---------------------------------------------------------------------------
 

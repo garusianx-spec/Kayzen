@@ -1,6 +1,7 @@
 import { BOOKS_365 } from '../../../../prisma/data/books-365';
 import { vocabularyRows } from '../../../../prisma/data/vocabulary';
 import { hashPassword } from '../../auth/password';
+import { toJalaliDayKey } from '../../date/jalali';
 import type { MemoryStore } from './engine';
 
 /**
@@ -219,6 +220,44 @@ export async function seedMemoryStore(store: MemoryStore): Promise<{ userId: str
 
   for (const notification of notifications) {
     store.create('NotificationLog', { data: { userId, ...notification } });
+  }
+
+  // A reading plan with a book part-read and a few sittings behind it, so the
+  // hub opens onto a ring that has moved and a shelf that has something on it.
+  store.create('ReadingPlan', { data: { userId, mode: 'SUMMARY', dailyMinutes: 30 } });
+
+  const book = store.create('UserBook', {
+    data: {
+      userId,
+      title: 'ملت عشق',
+      author: 'الیف شافاک',
+      totalPages: 512,
+      currentPage: 184,
+      colorToken: 'rose',
+      startedAt: at(now, -18),
+    },
+  }) as { id: string };
+
+  const sittings = [
+    { back: 4, minutes: 35, pagesRead: 22 },
+    { back: 3, minutes: 30, pagesRead: 18 },
+    { back: 2, minutes: 45, pagesRead: 31 },
+    { back: 1, minutes: 30, pagesRead: 20 },
+  ];
+
+  for (const sitting of sittings) {
+    store.create('ReadingSession', {
+      data: {
+        userId,
+        bookId: book.id,
+        // Midday, not evening: `at()` works in the container's zone, and a
+        // 21:00 UTC anchor lands on the *next* day in Tehran — which would
+        // seed a sitting into the future.
+        dayKey: toJalaliDayKey(at(now, -sitting.back, 9)),
+        minutes: sitting.minutes,
+        pagesRead: sitting.pagesRead,
+      },
+    });
   }
 
   return { userId };

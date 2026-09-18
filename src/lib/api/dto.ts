@@ -6,11 +6,13 @@ import type {
   Habit,
   Note,
   PomodoroSession,
+  ReadingPlan,
   Task,
   TaskAttachment,
   TaskCategory,
   TaskChecklistItem,
   User,
+  UserBook,
   UserReadingLog,
 } from '@prisma/client';
 
@@ -18,6 +20,12 @@ import { maskPhone } from '../auth/phone';
 import { daysUntil, formatRelativeJalali } from '../date/jalali';
 import { parseLayout } from '../domain/home-widgets';
 import { levelFromPoints } from '../domain/points';
+import {
+  coerceReadingDuration,
+  estimatePace,
+  summariseBookProgress,
+  type ReadingSessionLike,
+} from '../domain/reading-plan';
 import type { StreakResult } from '../domain/streak-engine';
 import type {
   BookDto,
@@ -29,10 +37,12 @@ import type {
   NoteDto,
   PomodoroSessionDto,
   ReadingLogDto,
+  ReadingPlanDto,
   SessionUserDto,
   TaskAttachmentLinkDto,
   TaskCategoryDto,
   TaskDto,
+  UserBookDto,
 } from '@/types/domain';
 
 /** A task row, optionally joined with the detail the composer edits. */
@@ -293,6 +303,48 @@ export function toReadingLogDto(log: UserReadingLog): ReadingLogDto {
     reflection: log.reflection,
     highlights: log.highlights,
     rating: log.rating,
+  };
+}
+
+/**
+ * The reading plan, with the duration re-validated on the way out.
+ *
+ * A row written before the durations were narrowed — or by hand — would
+ * otherwise reach a picker that has no chip for it, leaving every chip
+ * unselected and the reader unable to tell what their plan is.
+ */
+export function toReadingPlanDto(plan: Pick<ReadingPlan, 'mode' | 'dailyMinutes'>): ReadingPlanDto {
+  return {
+    mode: plan.mode,
+    dailyMinutes: coerceReadingDuration(plan.dailyMinutes),
+  };
+}
+
+/**
+ * A book, with its progress and — when the caller has them — its pace.
+ *
+ * Sessions are passed in rather than loaded here: the hub fetches one window of
+ * them for the whole shelf, and a DTO mapper that queried per book would turn
+ * one round trip into one per row.
+ */
+export function toUserBookDto(
+  book: UserBook,
+  sessions: readonly ReadingSessionLike[] = [],
+): UserBookDto {
+  const progress = summariseBookProgress(book);
+
+  return {
+    id: book.id,
+    title: book.title,
+    author: book.author,
+    totalPages: book.totalPages,
+    currentPage: book.currentPage,
+    colorToken: asColorToken(book.colorToken),
+    startedAt: book.startedAt.toISOString(),
+    finishedAt: book.finishedAt?.toISOString() ?? null,
+    completion: progress.completion,
+    pagesLeft: progress.pagesLeft,
+    pace: estimatePace({ sessions, pagesLeft: progress.pagesLeft }),
   };
 }
 

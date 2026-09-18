@@ -54,7 +54,7 @@ export default async function LibraryDayPage({ params }: { params: Promise<{ day
         className="kz-pressable inline-flex items-center gap-2 text-caption text-content-muted"
       >
         <ArrowRight className="h-4 w-4" aria-hidden />
-        کتابخانه
+        مرکز مطالعه
       </Link>
 
       <header className="space-y-1">

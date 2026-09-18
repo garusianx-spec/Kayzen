@@ -280,6 +280,55 @@ export interface AttachmentDto {
   filename: string;
 }
 
+export type ReadingMode = 'SUMMARY' | 'FULL_BOOK';
+
+export interface ReadingPlanDto {
+  mode: ReadingMode;
+  /** 15, 30 or 60. The picker has a chip for each. */
+  dailyMinutes: number;
+}
+
+export interface UserBookDto {
+  id: string;
+  title: string;
+  author: string | null;
+  totalPages: number;
+  currentPage: number;
+  colorToken: ColorToken;
+  startedAt: string;
+  finishedAt: string | null;
+  /** `0…1`, derived rather than stored so it cannot drift from the pages. */
+  completion: number;
+  pagesLeft: number;
+  /**
+   * How much further, at the pace this reader has actually kept.
+   *
+   * `sessionsLeft` is null when there is nothing to go on — a book just added,
+   * or one whose sittings are all older than the rhythm window. The UI says so
+   * rather than inventing a number.
+   */
+  pace: { pagesPerSession: number; sessionsLeft: number | null };
+}
+
+export interface ReadingDayDto {
+  dayKey: string;
+  /** 0 = شنبه … 6 = جمعه, resolved server-side from the day's own instant. */
+  weekdayIndex: number;
+  minutes: number;
+  metGoal: boolean;
+}
+
+/** The header of the Reading Hub: one ring, one streak, one week. */
+export interface ReadingRhythmDto {
+  minutesToday: number;
+  goalProgress: number;
+  metGoalToday: boolean;
+  streak: number;
+  minutesThisWeek: number;
+  /** Today first. */
+  week: ReadingDayDto[];
+}
+
 export interface BookDto {
   id: string;
   dayNumber: number;
