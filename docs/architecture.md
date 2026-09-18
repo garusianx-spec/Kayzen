@@ -55,9 +55,12 @@ Three rules earn their keep more than the rest:
 │                                   [id]/attachments (+ /sign)
 ├── habits/                        + [id]/log
 ├── notes/ · countdowns/ · finance/
-├── library/                       365-day reading curriculum
+├── library/                       the Reading Hub: today's summary, the
+│                                   plan, the shelf and the sittings
+│                                   (hub, plan, books/, sessions)
 ├── vocabulary/                    daily words; + courses/, review, vault
 ├── notifications/                 history; + preferences, read
+├── tools/weather                  province → city forecast, via Open-Meteo
 ├── pomodoro/ · preferences/ · push/subscribe
 ├── today                          the home screen's single snapshot query
 └── cron/                          reminders, streak reconciliation
@@ -76,6 +79,10 @@ Fourteen models. The ones that carry the modules this document is about:
   they were given on a day; `VocabularyMastery` is what they know.
 - **`NotificationPreference`** and **`NotificationLog`** — one switch per
   category, and the history behind the bell.
+- **`ReadingPlan`**, **`UserBook`** and **`ReadingSession`** — how long you mean
+  to read for and which half of the hub you are in; the shelf, tracked by page;
+  and the sittings. `ReadingSession.bookId` is nullable so a summary and a novel
+  land in the same streak.
 
 Every tenant-owned table carries the same RLS policy shape
 (`user_id = app.current_user_id()`), applied in `supabase/migrations/`. The two
@@ -114,6 +121,36 @@ table — which is why the note flow has no third endpoint.
 Attachments are the one part of the app that is deliberately **not**
 offline-capable: a signed URL expires, so queueing an upload for replay hours
 later would fail anyway. The picker says so instead of failing silently.
+
+## Weather
+
+Forecasts come from Open-Meteo, chosen because it needs no API key: a weather
+tool that only works for whoever set up an account is a tool that rots in every
+other clone of this repository.
+
+The call is proxied through `/api/v1/tools/weather` rather than made from the
+browser, and the city is resolved against a bundled index of Iran's 31
+provinces and their cities (`src/lib/domain/iran-geo.ts`) rather than taken as
+coordinates. That last part is the security-relevant half: forwarding a
+client-supplied latitude would make the route an open proxy, and a way to use
+the deployment's IP to geolocate anything at all.
+
+`src/lib/weather/open-meteo.ts` splits deliberately into a half that touches
+the network and a half that is pure. A response shape is the one part of this
+feature a third party can change without telling anybody, so the parser is what
+has tests: a fixture goes in, a DTO comes out, and no test needs an internet
+connection to fail honestly.
+
+Times arrive as _local naive_ ISO strings because the request pins `timezone` —
+`"2026-09-18T14:00"`, already in the reader's own reckoning, so "the next
+twenty-four hours" is a slice rather than a conversion. The cost is that they
+must never reach `new Date()` without an explicit zone, or a server in another
+hemisphere shifts the whole week by a day.
+
+The chosen city lives in `localStorage`, not on the account. A weather city is
+about where you _are_, not who you are: somebody spending a week in شیراز wants
+شیراز on the phone in their pocket without changing a setting that follows them
+home.
 
 ## Tree
 
@@ -199,6 +236,16 @@ src/app/
 │       │   │   ├── log/
 │       │   │   │   └── route.ts
 │       │   │   └── route.ts
+│       │   ├── books/
+│       │   │   ├── [id]/
+│       │   │   │   └── route.ts
+│       │   │   └── route.ts
+│       │   ├── hub/
+│       │   │   └── route.ts
+│       │   ├── plan/
+│       │   │   └── route.ts
+│       │   ├── sessions/
+│       │   │   └── route.ts
 │       │   └── today/
 │       │       └── route.ts
 │       ├── notes/
@@ -236,6 +283,9 @@ src/app/
 │       │   └── route.ts
 │       ├── today/
 │       │   └── route.ts
+│       ├── tools/
+│       │   └── weather/
+│       │       └── route.ts
 │       └── vocabulary/
 │           ├── courses/
 │           │   ├── [id]/
@@ -292,6 +342,11 @@ src/components/
 ├── pwa/
 │   ├── InstallPrompt.tsx
 │   └── ServiceWorkerRegistrar.tsx
+├── reading/
+│   ├── BookComposer.tsx
+│   ├── BookshelfPanel.tsx
+│   ├── ReadingSessionSheet.tsx
+│   └── RhythmHeader.tsx
 ├── screens/
 │   ├── CountdownsScreen.tsx
 │   ├── FinanceScreen.tsx
@@ -303,7 +358,8 @@ src/components/
 │   ├── TodayScreen.tsx
 │   ├── ToolsScreen.tsx
 │   ├── VocabularyScreen.tsx
-│   └── VocabularyVaultScreen.tsx
+│   ├── VocabularyVaultScreen.tsx
+│   └── WeatherScreen.tsx
 ├── settings/
 │   └── PasswordCard.tsx
 ├── ui/
@@ -320,7 +376,15 @@ src/components/
 │   └── toast.tsx
 ├── vocabulary/
 │   └── Flashcard.tsx
+├── weather/
+│   ├── CityPicker.tsx
+│   └── WeatherIcon.tsx
 └── widgets/
+    ├── home/
+    │   ├── CustomizeSheet.tsx
+    │   ├── DailyQuoteWidget.tsx
+    │   ├── FinanceGoalWidget.tsx
+    │   └── JalaliDateWidget.tsx
     ├── AmbientPlayer.tsx
     ├── HabitCard.tsx
     ├── NoteCard.tsx
@@ -358,9 +422,12 @@ src/lib/
 ├── domain/
 │   ├── books-365.ts
 │   ├── habits.ts
+│   ├── home-widgets.ts
+│   ├── iran-geo.ts
 │   ├── library.ts
 │   ├── notifications.ts
 │   ├── points.ts
+│   ├── reading-plan.ts
 │   ├── recurrence.ts
 │   ├── streak-engine.ts
 │   ├── task-detail.ts
@@ -386,6 +453,9 @@ src/lib/
 │   └── supabase.ts
 ├── validation/
 │   └── schemas.ts
+├── weather/
+│   ├── conditions.ts
+│   └── open-meteo.ts
 ├── crypto.ts
 ├── env.ts
 ├── errors.ts

@@ -3,6 +3,7 @@
 import {
   BookOpen,
   CalendarClock,
+  CloudSun,
   Flame,
   Languages,
   StickyNote,
@@ -63,6 +64,13 @@ const TOOLS: readonly Tool[] = [
     description: 'خلاصهٔ روزانه یا کتاب خودت',
     icon: BookOpen,
     tone: 'bg-emerald-soft text-emerald',
+  },
+  {
+    href: '/tools/weather',
+    label: 'هوای شهر',
+    description: 'استان و شهر، ساعتی و هفتگی',
+    icon: CloudSun,
+    tone: 'bg-sky-soft text-sky',
   },
   {
     href: '/countdowns',

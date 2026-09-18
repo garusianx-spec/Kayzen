@@ -384,3 +384,65 @@ export interface TodaySnapshotDto {
     points: number;
   };
 }
+
+// ---------------------------------------------------------------------------
+// Weather
+// ---------------------------------------------------------------------------
+
+/**
+ * What a weather code means, flattened onto the reading itself.
+ *
+ * Spread rather than nested (`reading.condition.label`) because every consumer
+ * wants both halves at once, and one less level of indirection is one less
+ * place for a row to render an empty string.
+ */
+export interface WeatherLook {
+  /** The raw WMO code, kept so a future refinement is not a data migration. */
+  code: number;
+  label: string;
+  /** Lucide icon name, resolved by the component. */
+  icon: string;
+  tone: 'violet' | 'flame' | 'emerald' | 'rose' | 'sky';
+  isDay: boolean;
+}
+
+export interface CurrentWeatherDto extends WeatherLook {
+  /** Local naive ISO, in the city's own timezone. */
+  time: string;
+  temperature: number;
+  /** "Feels like" — the number that decides whether you take a coat. */
+  apparentTemperature: number;
+  /** Percent. */
+  humidity: number;
+  /** km/h. */
+  windSpeed: number;
+}
+
+export interface HourlyWeatherDto extends WeatherLook {
+  time: string;
+  /** `"۱۴"` — the hour, already in Persian digits. */
+  hourLabel: string;
+  temperature: number;
+  precipitationChance: number;
+}
+
+export interface DailyWeatherDto extends WeatherLook {
+  /** Gregorian calendar date, `"2026-09-18"`. */
+  date: string;
+  /** `"۲۷ شهریور"`. */
+  jalaliLabel: string;
+  /** 0 = شنبه … 6 = جمعه. */
+  weekdayIndex: number;
+  high: number;
+  low: number;
+  precipitationChance: number;
+}
+
+export interface ForecastDto {
+  city: { id: string; name: string; provinceId: string; provinceName: string };
+  current: CurrentWeatherDto;
+  /** The next twenty-four hours, starting with the current one. */
+  hourly: HourlyWeatherDto[];
+  daily: DailyWeatherDto[];
+  fetchedAt: string;
+}
