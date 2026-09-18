@@ -4,7 +4,7 @@ import { logger } from '../logger';
 import { MAX_ATTACHMENT_BYTES, isAllowedAttachmentType } from './constants';
 
 /**
- * Supabase Storage — note attachments.
+ * Supabase Storage — attachments.
  *
  * Kayzen authenticates with its own phone/OTP sessions rather than Supabase
  * Auth, so `auth.uid()` is always NULL inside Storage and RLS policies written
@@ -17,10 +17,12 @@ import { MAX_ATTACHMENT_BYTES, isAllowedAttachmentType } from './constants';
  * another's files, which is why {@link assertOwnedObjectPath} guards every call
  * that touches a client-supplied path. Objects are laid out as
  *
- *     <user-uuid>/<note-uuid>/<random>-<filename>
+ *     <user-uuid>/<parent-uuid>/<random>-<filename>
  *
- * so ownership is the first path segment and can be checked without a database
- * round trip. The bytes never pass through the Next.js server: the browser
+ * where the parent is the note or task the file hangs off. Ownership is the
+ * first path segment and can be checked without a database round trip, and the
+ * second segment is what makes one note's files distinguishable from another's
+ * without a second index. The bytes never pass through the Next.js server: the browser
  * uploads straight to Supabase with a one-shot signed URL, which keeps a 10 MiB
  * photo out of a serverless function's request body.
  */
@@ -70,14 +72,15 @@ export function sanitizeAttachmentFilename(filename: string): string {
   return safe.length > 100 ? safe.slice(-100) : safe;
 }
 
-/** `<user>/<note>/<random>-<filename>` — the canonical object key. */
+/** `<user>/<parent>/<random>-<filename>` — the canonical object key. */
 export function attachmentObjectPath(options: {
   userId: string;
-  noteId: string;
+  /** The note or task the file belongs to. */
+  parentId: string;
   filename: string;
 }): string {
   const prefix = crypto.randomUUID().slice(0, 8);
-  return `${options.userId}/${options.noteId}/${prefix}-${sanitizeAttachmentFilename(options.filename)}`;
+  return `${options.userId}/${options.parentId}/${prefix}-${sanitizeAttachmentFilename(options.filename)}`;
 }
 
 /**
@@ -85,17 +88,25 @@ export function attachmentObjectPath(options: {
  *
  * Clients supply object paths when downloading and deleting, and the
  * service-role key would happily sign a URL for *any* object in the bucket.
- * This check — first segment is the caller's own UUID, second is a real note
- * id, no traversal — is what stops "sign me a URL for someone else's note"
+ * This check — first segment is the caller's own UUID, second is a real record
+ * id, no traversal — is what stops "sign me a URL for someone else's file"
  * from working.
+ *
+ * `parentId` narrows it one step further, to a single note or task. The task
+ * flow needs it: the client hands back an object key after uploading, and
+ * without this a key minted for one task could be registered against another.
+ * Both rows would be the caller's own, so nothing leaks across tenants — but a
+ * file would appear on a task it was never uploaded to, and deleting that task
+ * would take another task's object with it.
  */
-export function assertOwnedObjectPath(path: string, userId: string): void {
+export function assertOwnedObjectPath(path: string, userId: string, parentId?: string): void {
   const segments = path.split('/');
 
   const isOwned =
     segments.length === 3 &&
     segments[0] === userId &&
     UUID_PATTERN.test(segments[1] ?? '') &&
+    (parentId === undefined || segments[1] === parentId) &&
     (segments[2]?.length ?? 0) > 0 &&
     !path.includes('..') &&
     !path.startsWith('/');
@@ -127,19 +138,19 @@ async function storageFetch(
 export interface SignedUpload {
   /** Absolute URL the browser PUTs the file to. Single use. */
   uploadUrl: string;
-  /** The object key to store on the note once the upload succeeds. */
+  /** The object key to record once the upload succeeds. */
   path: string;
 }
 
 /**
  * Mints a one-shot upload URL.
  *
- * The caller must already have established that the note belongs to the user;
- * this function trusts `userId` and builds the key from it.
+ * The caller must already have established that the parent record belongs to
+ * the user; this function trusts `userId` and builds the key from it.
  */
 export async function createSignedUpload(options: {
   userId: string;
-  noteId: string;
+  parentId: string;
   filename: string;
   contentType: string;
   sizeBytes: number;

@@ -1,18 +1,27 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Clock, Flag, Repeat } from 'lucide-react';
+import { CheckSquare, Clock, Flag, Paperclip, Repeat } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { TaskCheckbox } from './TaskCheckbox';
 import { useHapticFeedback } from '@/hooks/use-haptic-feedback';
 import { useToggleTask } from '@/lib/api/queries';
+import { toPersianDigits } from '@/lib/date/digits';
 import { formatRelativeJalali } from '@/lib/date/jalali';
 import { describeRecurrence, parseRecurrence } from '@/lib/domain/recurrence';
 import { cn } from '@/lib/utils';
 import type { TaskDto } from '@/types/domain';
 
-/** One row in the day's list. */
+/**
+ * One row in the day's list.
+ *
+ * The meta line carries only what changes a decision from the list: when it is
+ * due, whether it is urgent, whether it repeats, how far into its sub-steps it
+ * is, and whether it has files. Cost and location are not here — they matter
+ * once the task is being *done*, which is the composer's job, and a row that
+ * shows everything shows nothing.
+ */
 export function TaskItem({ task, timezone }: { task: TaskDto; timezone?: string }) {
   const toggleTask = useToggleTask();
   const haptics = useHapticFeedback();
@@ -84,6 +93,24 @@ export function TaskItem({ task, timezone }: { task: TaskDto; timezone?: string 
             <span className="inline-flex items-center gap-1">
               <Repeat className="h-3.5 w-3.5" aria-hidden />
               {recurrenceLabel}
+            </span>
+          ) : null}
+
+          {task.checklist.length > 0 ? (
+            <span className="tabular inline-flex items-center gap-1">
+              <CheckSquare className="h-3.5 w-3.5" aria-hidden />
+              {toPersianDigits(task.checklist.filter((item) => item.completed).length)} از{' '}
+              {toPersianDigits(task.checklist.length)}
+            </span>
+          ) : null}
+
+          {task.attachments.length > 0 ? (
+            <span
+              className="tabular inline-flex items-center gap-1"
+              aria-label={`${toPersianDigits(task.attachments.length)} فایل`}
+            >
+              <Paperclip className="h-3.5 w-3.5" aria-hidden />
+              {toPersianDigits(task.attachments.length)}
             </span>
           ) : null}
         </div>

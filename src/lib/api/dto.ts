@@ -30,6 +30,7 @@ import type {
   PomodoroSessionDto,
   ReadingLogDto,
   SessionUserDto,
+  TaskAttachmentLinkDto,
   TaskCategoryDto,
   TaskDto,
 } from '@/types/domain';
@@ -137,6 +138,29 @@ export function toTaskDto(task: TaskWithDetail, now: Date = new Date()): TaskDto
       sizeBytes: file.sizeBytes,
       createdAt: file.createdAt.toISOString(),
     })),
+  };
+}
+
+/**
+ * An attachment row plus the freshly signed link to read it.
+ *
+ * The signature is passed in rather than fetched here: signing is a batch call
+ * to Storage for a whole task's files at once, and a DTO mapper that reached
+ * out to the network would turn one round trip into one per row.
+ */
+export function toTaskAttachmentLinkDto(
+  attachment: TaskAttachment,
+  url: string,
+  expiresAt: string,
+): TaskAttachmentLinkDto {
+  return {
+    id: attachment.id,
+    fileName: attachment.fileName,
+    mimeType: attachment.mimeType,
+    sizeBytes: attachment.sizeBytes,
+    createdAt: attachment.createdAt.toISOString(),
+    url,
+    expiresAt,
   };
 }
 

@@ -155,6 +155,19 @@ export interface TaskAttachmentDto {
   createdAt: string;
 }
 
+/**
+ * An attachment plus a link to read it.
+ *
+ * Separate from {@link TaskAttachmentDto} because signing a URL is a round trip
+ * to Storage: the task list carries the bare metadata, and only the composer —
+ * which is showing one task, and might actually open a file — pays for links.
+ */
+export interface TaskAttachmentLinkDto extends TaskAttachmentDto {
+  url: string;
+  /** ISO instant the link stops working. Roughly fifteen minutes out. */
+  expiresAt: string;
+}
+
 export interface TaskDto {
   id: string;
   title: string;

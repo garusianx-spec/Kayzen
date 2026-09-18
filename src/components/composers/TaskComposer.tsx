@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Coins, MapPin, Repeat, Tag } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { AttachmentPicker } from './task/AttachmentPicker';
 import { ChecklistBuilder, type ChecklistDraft } from './task/ChecklistBuilder';
 import { PrioritySelector, normalisePriority } from './task/PrioritySelector';
 import { Button } from '@/components/ui/button';
@@ -12,10 +13,17 @@ import { JalaliDatePicker } from '@/components/ui/jalali-date-picker';
 import { Sheet } from '@/components/ui/sheet';
 import { useToast } from '@/components/ui/toast';
 import { useHapticFeedback } from '@/hooks/use-haptic-feedback';
+import {
+  describeUnacceptable,
+  uploadErrorMessage,
+  uploadTaskAttachment,
+  useTaskAttachments,
+} from '@/hooks/use-task-attachments';
 import { isQueued } from '@/lib/api/client';
 import { useCreateTask, useTaskCategories, useUpdateTask } from '@/lib/api/queries';
 import { formatPersianNumber, parsePersianNumber, toPersianDigits } from '@/lib/date/digits';
 import { serializeRecurrence, type RecurrenceFrequency } from '@/lib/domain/recurrence';
+import { MAX_ATTACHMENTS_PER_RECORD } from '@/lib/storage/constants';
 import { cn } from '@/lib/utils';
 import { createTaskSchema } from '@/lib/validation/schemas';
 import type { TaskDto } from '@/types/domain';
@@ -37,6 +45,12 @@ import type { TaskDto } from '@/types/domain';
  * title, tap save — stays two interactions, while "buy a present for Maryam,
  * ۸۰۰ هزار تومان, at the bazaar, before Thursday, in three steps" is reachable
  * without leaving the sheet.
+ *
+ * Files are the one field whose behaviour differs between the two modes, and it
+ * is hidden from the user: an existing task has an id to upload against, so its
+ * files go straight to Storage; a task still being written does not, so its
+ * files wait in memory and are uploaded the moment the task has an id. Saving
+ * therefore stays "one tap" either way rather than "save, then attach".
  */
 
 const REPEATS: Array<{ value: RecurrenceFrequency | 'NONE'; label: string }> = [
@@ -73,17 +87,24 @@ export function TaskComposer({ open, onClose, task = null }: TaskComposerProps) 
   const [cost, setCost] = useState('');
   const [location, setLocation] = useState('');
   const [checklist, setChecklist] = useState<ChecklistDraft[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [uploadingStaged, setUploadingStaged] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [error, setError] = useState<string>();
 
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const categories = useTaskCategories();
+  // Signing a batch of download URLs costs a round trip to Storage, so it waits
+  // for the sheet to actually be open rather than firing for every task in the
+  // list behind it.
+  const attachments = useTaskAttachments(task?.id ?? null, { enabled: open && editing });
   const haptics = useHapticFeedback();
   const reduceMotion = useReducedMotion();
   const { success, offline } = useToast();
 
-  const saving = createTask.isPending || updateTask.isPending;
+  const saving = createTask.isPending || updateTask.isPending || uploadingStaged;
 
   // Re-seed whenever the sheet opens, so reopening after a cancel does not
   // resurrect half of the previous draft.
@@ -105,13 +126,60 @@ export function TaskComposer({ open, onClose, task = null }: TaskComposerProps) 
         completed: item.completed,
       })),
     );
+    setPendingFiles([]);
     // Detail opens already expanded when the task has any, so an edit never
     // hides the thing the user came to change.
     setShowDetail(
-      Boolean(task?.costAmount || task?.location || (task?.checklist?.length ?? 0) > 0),
+      Boolean(
+        task?.costAmount ||
+          task?.location ||
+          (task?.checklist?.length ?? 0) > 0 ||
+          (task?.attachments?.length ?? 0) > 0,
+      ),
     );
     setError(undefined);
+    setFileError(null);
   }, [open, task]);
+
+  const pick = (files: File[]): void => {
+    setFileError(null);
+
+    const room =
+      MAX_ATTACHMENTS_PER_RECORD - (attachments.attachments.length + pendingFiles.length);
+    if (room <= 0) {
+      setFileError('برای هر کار حداکثر ۱۰ فایل مجاز است.');
+      return;
+    }
+
+    // Everything the bucket would reject is rejected here instead, so the user
+    // hears about a 12 MiB photo before waiting for it to upload.
+    const accepted: File[] = [];
+    for (const file of files.slice(0, room)) {
+      const unacceptable = describeUnacceptable(file);
+      if (unacceptable) {
+        setFileError(unacceptable);
+        continue;
+      }
+      accepted.push(file);
+    }
+
+    if (files.length > room) setFileError('برای هر کار حداکثر ۱۰ فایل مجاز است.');
+    if (accepted.length === 0) return;
+
+    haptics.impact('light');
+
+    if (editing) {
+      // The task exists, so there is nothing to wait for. Sequential rather
+      // than parallel: the per-task ceiling is counted server-side, and three
+      // simultaneous signings would race past it.
+      void (async () => {
+        for (const file of accepted) await attachments.upload(file);
+      })();
+      return;
+    }
+
+    setPendingFiles((current) => [...current, ...accepted]);
+  };
 
   const submit = async (): Promise<void> => {
     const parsed = createTaskSchema.safeParse({
@@ -162,7 +230,27 @@ export function TaskComposer({ open, onClose, task = null }: TaskComposerProps) 
 
       if (isQueued(result)) {
         offline('ثبت شد', 'به‌محض وصل‌شدن می‌فرستیمش.');
+
+        // A parked create has no id, and a signed upload URL cannot wait in the
+        // outbox for it — signatures expire. Saying so beats a silent drop.
+        if (pendingFiles.length > 0) {
+          setFileError('کار ثبت شد، ولی فایل‌ها آنلاین لازم دارند. بعداً از همین‌جا اضافه‌شان کن.');
+          return;
+        }
       } else {
+        if (pendingFiles.length > 0 && 'task' in result) {
+          const failed = await uploadStaged(result.task.id);
+
+          // The task is already saved, so a failed upload is not a failed save:
+          // the sheet stays open on the now-existing task's files rather than
+          // throwing the whole form away.
+          if (failed) {
+            setFileError(failed);
+            success('اضافه شد', 'کار ثبت شد؛ فقط فایل‌ها نرفتند.');
+            return;
+          }
+        }
+
         success(editing ? 'به‌روز شد' : 'اضافه شد', editing ? undefined : 'یک قدم کوچک دیگر 🌱');
       }
 
@@ -170,6 +258,29 @@ export function TaskComposer({ open, onClose, task = null }: TaskComposerProps) 
     } catch {
       haptics.error();
       setError('ذخیره نشد؛ دوباره تلاش کن.');
+    }
+  };
+
+  /** Uploads the staged files against a task that now exists. Returns an error. */
+  const uploadStaged = async (taskId: string): Promise<string | null> => {
+    setUploadingStaged(true);
+
+    try {
+      // Sequential, and the list shrinks as each file lands: if the third of
+      // five fails, the two that succeeded are gone from the tray and a retry
+      // does not upload them twice.
+      for (const file of [...pendingFiles]) {
+        try {
+          await uploadTaskAttachment(taskId, file);
+          setPendingFiles((current) => current.filter((candidate) => candidate !== file));
+        } catch (caught) {
+          return uploadErrorMessage(caught);
+        }
+      }
+
+      return null;
+    } finally {
+      setUploadingStaged(false);
     }
   };
 
@@ -304,6 +415,21 @@ export function TaskComposer({ open, onClose, task = null }: TaskComposerProps) 
               />
             </div>
 
+            <AttachmentPicker
+              saved={attachments.attachments}
+              pending={pendingFiles}
+              isLoading={attachments.isLoading}
+              isUploading={attachments.isUploading || uploadingStaged}
+              error={fileError ?? attachments.error}
+              onPick={pick}
+              onRemoveSaved={(id) => void attachments.remove(id)}
+              onRemovePending={(index) => {
+                haptics.impact('medium');
+                setFileError(null);
+                setPendingFiles((current) => current.filter((_, at) => at !== index));
+              }}
+            />
+
             <div className="space-y-2">
               <span className="flex items-center gap-1.5 text-caption text-content-secondary">
                 <Repeat className="h-3.5 w-3.5" aria-hidden />
@@ -341,7 +467,7 @@ export function TaskComposer({ open, onClose, task = null }: TaskComposerProps) 
             }}
             className="min-h-[44px] w-full rounded-card border border-dashed border-border text-caption text-content-muted active:scale-95"
           >
-            جزئیات بیشتر — زیرکار، هزینه، مکان
+            جزئیات بیشتر — زیرکار، هزینه، مکان، فایل
           </button>
         )}
 

@@ -69,7 +69,7 @@ export const POST = withAuthedRoute<
 
     return createSignedUpload({
       userId: user.id,
-      noteId: id,
+      parentId: id,
       filename: body.filename,
       contentType: body.contentType,
       sizeBytes: body.sizeBytes,

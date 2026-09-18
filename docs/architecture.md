@@ -51,7 +51,8 @@ Three rules earn their keep more than the rest:
 │   ├── password · password/login  phone + password, and setting one
 │   ├── refresh · logout           rotating refresh tokens
 │   └── session
-├── tasks/                         + categories/, [id]/complete, [id]/attachments
+├── tasks/                         + categories/, [id]/complete,
+│                                   [id]/attachments (+ /sign)
 ├── habits/                        + [id]/log
 ├── notes/ · countdowns/ · finance/
 ├── library/                       365-day reading curriculum
@@ -81,6 +82,38 @@ Every tenant-owned table carries the same RLS policy shape
 child tables of `Task` denormalise `user_id` so the policy needs no join, and a
 trigger refuses any row whose `user_id` does not own its task — a denormalised
 key that can disagree with its source is a hole, not a shortcut.
+
+## Attachments
+
+Bytes never pass through the Next.js server. Objects live in a private Supabase
+bucket with **no RLS policies at all** — Kayzen authenticates with its own
+phone sessions, so `auth.uid()` inside Storage is always NULL and any policy
+written against it would deny everything. Access is mediated entirely by the
+service-role key held in `src/lib/storage/supabase.ts`, which makes
+`assertOwnedObjectPath` the only thing standing between one tenant and
+another's files. Keys are laid out `<user-uuid>/<parent-uuid>/<random>-<name>`,
+so ownership is the first path segment and needs no database round trip.
+
+An upload is three calls, and the order is the point:
+
+1. `POST /tasks/:id/attachments/sign` — ownership is checked against the
+   RLS-scoped client, then a one-shot signed URL comes back;
+2. the browser `PUT`s the file straight to Supabase;
+3. `POST /tasks/:id/attachments` records the object.
+
+Step 3 is separate because a signed URL that is minted and never used costs
+nothing and expires, whereas writing the row first would leave a task pointing
+at an object that does not exist. On the way back in, the path the client hands
+to step 3 is re-checked against _this_ task's folder as well as the caller's
+namespace: both rows would belong to the same person, so RLS sees nothing
+wrong, but a file registered against the wrong task would be deleted with it.
+
+Notes differ only in where the record lands — a `text[]` column rather than a
+table — which is why the note flow has no third endpoint.
+
+Attachments are the one part of the app that is deliberately **not**
+offline-capable: a signed URL expires, so queueing an upload for replay hours
+later would fail anyway. The picker says so instead of failing silently.
 
 ## Tree
 
@@ -189,6 +222,10 @@ src/app/
 │       │       └── route.ts
 │       ├── tasks/
 │       │   ├── [id]/
+│       │   │   ├── attachments/
+│       │   │   │   ├── sign/
+│       │   │   │   │   └── route.ts
+│       │   │   │   └── route.ts
 │       │   │   ├── complete/
 │       │   │   │   └── route.ts
 │       │   │   └── route.ts
@@ -228,6 +265,7 @@ src/components/
 │   └── logo-geometry.mjs
 ├── composers/
 │   ├── task/
+│   │   ├── AttachmentPicker.tsx
 │   │   ├── ChecklistBuilder.tsx
 │   │   └── PrioritySelector.tsx
 │   ├── BookReflectionComposer.tsx
@@ -367,6 +405,7 @@ src/hooks/
 ├── use-online-status.ts
 ├── use-pomodoro-timer.ts
 ├── use-push-notifications.ts
+├── use-task-attachments.ts
 └── use-web-otp.ts
 
 src/stores/

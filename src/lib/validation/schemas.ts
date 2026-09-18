@@ -300,6 +300,36 @@ export const deleteAttachmentSchema = z.object({
 export type SignAttachmentInput = z.infer<typeof signAttachmentSchema>;
 export type DeleteAttachmentInput = z.infer<typeof deleteAttachmentSchema>;
 
+/**
+ * Step three of a task upload: the bytes are in the bucket, record the object.
+ *
+ * A note keeps its attachments in a `text[]` column, so recording one is a
+ * `PATCH` on the note. A task keeps them in a table with a name, a type and a
+ * size, which the server never sees — the browser uploads straight to Storage —
+ * so the client has to hand them back here. `path` is re-checked against the
+ * caller's namespace and against *this* task's id before anything is written;
+ * the rest is metadata, and a client that lies about it only mislabels its own
+ * file.
+ */
+export const confirmTaskAttachmentSchema = z.object({
+  path: z.string().min(3).max(500),
+  fileName: z.string().trim().min(1, 'نام فایل لازم است.').max(200),
+  mimeType: z.string().min(3).max(120),
+  sizeBytes: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(10 * 1024 * 1024),
+});
+
+export const deleteTaskAttachmentSchema = z.object({
+  /** The row id, not the object path: the row is the thing being removed. */
+  id: uuidSchema,
+});
+
+export type ConfirmTaskAttachmentInput = z.infer<typeof confirmTaskAttachmentSchema>;
+export type DeleteTaskAttachmentInput = z.infer<typeof deleteTaskAttachmentSchema>;
+
 // ---------------------------------------------------------------------------
 // Tasks
 // ---------------------------------------------------------------------------

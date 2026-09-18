@@ -6,8 +6,15 @@ import {
   attachmentObjectPath,
   sanitizeAttachmentFilename,
 } from '@/lib/storage/supabase';
-import { formatBytes, isAllowedAttachmentType } from '@/lib/storage/constants';
+import {
+  MAX_ATTACHMENTS_PER_RECORD,
+  formatBytes,
+  isAllowedAttachmentType,
+} from '@/lib/storage/constants';
+import { describeUnacceptable, uploadErrorMessage } from '@/hooks/use-task-attachments';
+import { ApiClientError } from '@/lib/api/client';
 import { ApiError } from '@/lib/errors';
+import { confirmTaskAttachmentSchema } from '@/lib/validation/schemas';
 
 /**
  * Attachment path safety.
@@ -23,6 +30,7 @@ import { ApiError } from '@/lib/errors';
 const USER = '6da00b62-1ec4-418e-847f-913bba8442dd';
 const OTHER_USER = '0d023745-3c28-4748-9f4c-931db8b0fa06';
 const NOTE = '23cc89e6-bb4c-4983-96ab-b4347d45993d';
+const OTHER_PARENT = '9f1c3f0a-6b5e-4f2c-8c47-1a0e5d2b7c31';
 
 describe('assertOwnedObjectPath', () => {
   it('accepts a well-formed path in the caller namespace', () => {
@@ -73,6 +81,29 @@ describe('assertOwnedObjectPath', () => {
   });
 });
 
+describe('assertOwnedObjectPath, narrowed to one parent', () => {
+  it('accepts a path in that parent folder', () => {
+    expect(() =>
+      assertOwnedObjectPath(`${USER}/${NOTE}/a1b2c3d4-report.pdf`, USER, NOTE),
+    ).not.toThrow();
+  });
+
+  it("refuses the caller's own path under a different parent", () => {
+    // This is the task-confirm hole: both rows belong to the caller, so RLS
+    // cannot see anything wrong — a file uploaded for one task would be
+    // registered against another, and deleting that task would take it.
+    expect(() =>
+      assertOwnedObjectPath(`${USER}/${OTHER_PARENT}/a1b2c3d4-report.pdf`, USER, NOTE),
+    ).toThrow(ApiError);
+  });
+
+  it('still refuses another tenant, parent id notwithstanding', () => {
+    expect(() => assertOwnedObjectPath(`${OTHER_USER}/${NOTE}/secret.pdf`, USER, NOTE)).toThrow(
+      ApiError,
+    );
+  });
+});
+
 describe('sanitizeAttachmentFilename', () => {
   it('strips path separators and traversal sequences', () => {
     expect(sanitizeAttachmentFilename('../../etc/passwd')).toBe('.etcpasswd');
@@ -101,7 +132,7 @@ describe('sanitizeAttachmentFilename', () => {
 
 describe('attachmentObjectPath', () => {
   it('produces a path its own guard accepts', () => {
-    const path = attachmentObjectPath({ userId: USER, noteId: NOTE, filename: 'photo.png' });
+    const path = attachmentObjectPath({ userId: USER, parentId: NOTE, filename: 'photo.png' });
 
     expect(() => assertOwnedObjectPath(path, USER)).not.toThrow();
     expect(path.startsWith(`${USER}/${NOTE}/`)).toBe(true);
@@ -109,14 +140,14 @@ describe('attachmentObjectPath', () => {
   });
 
   it('is unique per call, so two files of the same name coexist', () => {
-    const options = { userId: USER, noteId: NOTE, filename: 'photo.png' };
+    const options = { userId: USER, parentId: NOTE, filename: 'photo.png' };
     expect(attachmentObjectPath(options)).not.toBe(attachmentObjectPath(options));
   });
 
   it('cannot be steered out of the namespace by the filename', () => {
     const path = attachmentObjectPath({
       userId: USER,
-      noteId: NOTE,
+      parentId: NOTE,
       filename: '../../../etc/passwd',
     });
 
@@ -143,5 +174,78 @@ describe('shared limits', () => {
   it('formats sizes in Persian digits', () => {
     expect(formatBytes(2 * 1024 * 1024)).toBe('۲.۰ مگابایت');
     expect(formatBytes(50 * 1024)).toBe('۵۰ کیلوبایت');
+  });
+
+  it('never calls a real file zero', () => {
+    // A 70-byte icon rounded into kilobytes reads as a failed upload.
+    expect(formatBytes(70)).toBe('۷۰ بایت');
+    expect(formatBytes(1023)).toBe('۱۰۲۳ بایت');
+    expect(formatBytes(1024)).toBe('۱ کیلوبایت');
+  });
+});
+
+describe('confirmTaskAttachmentSchema', () => {
+  const valid = {
+    path: `${USER}/${NOTE}/a1b2c3d4-report.pdf`,
+    fileName: 'report.pdf',
+    mimeType: 'application/pdf',
+    sizeBytes: 2048,
+  };
+
+  it('accepts a well-formed confirmation', () => {
+    expect(confirmTaskAttachmentSchema.parse(valid).fileName).toBe('report.pdf');
+  });
+
+  it('refuses a file larger than the bucket allows', () => {
+    const tooBig = { ...valid, sizeBytes: 11 * 1024 * 1024 };
+    expect(confirmTaskAttachmentSchema.safeParse(tooBig).success).toBe(false);
+  });
+
+  it('refuses an empty name and a zero size', () => {
+    expect(confirmTaskAttachmentSchema.safeParse({ ...valid, fileName: '   ' }).success).toBe(
+      false,
+    );
+    expect(confirmTaskAttachmentSchema.safeParse({ ...valid, sizeBytes: 0 }).success).toBe(false);
+  });
+});
+
+describe('describeUnacceptable', () => {
+  const file = (options: { type: string; size: number }): File =>
+    ({ name: 'x', type: options.type, size: options.size }) as File;
+
+  it('passes an image inside the limit', () => {
+    expect(describeUnacceptable(file({ type: 'image/png', size: 1024 }))).toBeNull();
+  });
+
+  it('names the reason rather than failing later at the bucket', () => {
+    expect(describeUnacceptable(file({ type: 'text/html', size: 10 }))).toContain('PDF');
+    expect(describeUnacceptable(file({ type: 'image/png', size: 11 * 1024 * 1024 }))).toContain(
+      '۱۰ مگابایت',
+    );
+    expect(describeUnacceptable(file({ type: 'image/png', size: 0 }))).toContain('خالی');
+  });
+});
+
+describe('uploadErrorMessage', () => {
+  it('prefers the field message the API sent, which names the real limit', () => {
+    const error = new ApiClientError('درخواست نامعتبر است.', {
+      status: 422,
+      details: { attachments: ['برای هر کار حداکثر ۱۰ فایل مجاز است.'] },
+    });
+
+    expect(uploadErrorMessage(error)).toBe('برای هر کار حداکثر ۱۰ فایل مجاز است.');
+  });
+
+  it('falls back to the envelope message, then to a generic one', () => {
+    expect(uploadErrorMessage(new ApiClientError('سرویس فایل پیکربندی نشده است.'))).toBe(
+      'سرویس فایل پیکربندی نشده است.',
+    );
+    expect(uploadErrorMessage(new Error('socket hang up'))).toBe('بارگذاری فایل ناموفق بود.');
+  });
+});
+
+describe('the per-record ceiling', () => {
+  it('is the same number the note schema and both routes use', () => {
+    expect(MAX_ATTACHMENTS_PER_RECORD).toBe(10);
   });
 });
