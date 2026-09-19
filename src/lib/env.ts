@@ -77,6 +77,19 @@ const serverSchema = z
 
     CRON_SECRET: z.string().optional(),
 
+    // All three, or none. `googleOAuthConfig()` reports the feature as
+    // unconfigured rather than throwing, so a deployment without a Google
+    // project simply shows "not connected" instead of a broken settings card.
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+    // Its own key rather than a reuse of AUTH_JWT_SECRET: rotating the one
+    // that signs sessions should not silently invalidate every stored refresh
+    // token, which would un-link every Google account at once.
+    GOOGLE_TOKEN_ENCRYPTION_KEY: z
+      .string()
+      .min(32, 'GOOGLE_TOKEN_ENCRYPTION_KEY must carry at least 32 characters')
+      .optional(),
+
     ANDROID_PACKAGE_NAME: z.string().default('app.kayzen.twa'),
     ANDROID_SHA256_CERT_FINGERPRINTS: z.string().default(''),
 
@@ -352,6 +365,33 @@ export function usesMemoryDatabase(
   if (source.DEV_DATABASE === 'postgres') return false;
 
   return !source.DATABASE_URL?.trim();
+}
+
+export interface GoogleOAuthConfig {
+  clientId: string;
+  clientSecret: string;
+  encryptionKey: string;
+}
+
+/**
+ * The Google integration's credentials, or null when it is not set up.
+ *
+ * Null rather than a throw: a deployment with no Google project is a perfectly
+ * valid deployment, and the settings card says "not configured" instead of the
+ * whole page 500-ing on an optional feature.
+ */
+export function googleOAuthConfig(): GoogleOAuthConfig | null {
+  const env = serverEnv();
+
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_TOKEN_ENCRYPTION_KEY) {
+    return null;
+  }
+
+  return {
+    clientId: env.GOOGLE_CLIENT_ID,
+    clientSecret: env.GOOGLE_CLIENT_SECRET,
+    encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY,
+  };
 }
 
 /** SHA-256 certificate fingerprints permitted to open the TWA without chrome. */

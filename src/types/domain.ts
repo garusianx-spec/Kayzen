@@ -446,3 +446,31 @@ export interface ForecastDto {
   daily: DailyWeatherDto[];
   fetchedAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Google Calendar
+// ---------------------------------------------------------------------------
+
+/**
+ * The settings card's whole view of the integration.
+ *
+ * No token, no scope string, no calendar id, no event ids. The card has no use
+ * for any of them, and a response shape is the last place to be generous —
+ * this is the same allow-list discipline that keeps `passwordHash` off the
+ * wire.
+ */
+export interface GoogleLinkDto {
+  /** False when the deployment has no Google credentials at all. */
+  configured: boolean;
+  connected: boolean;
+  /** The linked address, so somebody with two accounts can tell which. */
+  email?: string;
+  /** ISO instant of the last pass that finished with nothing failing. */
+  lastSyncedAt?: string | null;
+  /** Changes waiting to go out. Zero means everything is mirrored. */
+  pending?: number;
+  /** Changes that have exhausted their retries and need a nudge. */
+  stalled?: number;
+  /** Present when the grant itself is the problem and only re-linking fixes it. */
+  needsReauth?: boolean;
+}

@@ -3,6 +3,7 @@
 import { Bell, LogOut, Moon, Smartphone, Sun, Vibrate } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+import { GoogleCalendarCard } from '@/components/settings/GoogleCalendarCard';
 import { PasswordCard } from '@/components/settings/PasswordCard';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/switch';
@@ -124,6 +125,8 @@ export function SettingsScreen() {
       </section>
 
       {user ? <PasswordCard hasPassword={user.hasPassword} /> : null}
+
+      <GoogleCalendarCard timezone={user?.timezone} />
 
       <section className="kz-card space-y-3" aria-label="یادآورها">
         <h2 className="flex items-center gap-2 text-title text-content-primary">

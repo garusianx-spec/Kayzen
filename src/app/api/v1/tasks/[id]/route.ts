@@ -2,6 +2,7 @@ import { toTaskDto } from '@/lib/api/dto';
 import { TASK_DETAIL_INCLUDE, checklistWrite } from '@/lib/domain/task-detail';
 import { withAuthedRoute } from '@/lib/api/handler';
 import { toJalaliDayKey } from '@/lib/date/jalali';
+import { syncToCalendar } from '@/lib/google/auto-sync';
 import { ApiError } from '@/lib/errors';
 import { updateTaskSchema, uuidSchema, type UpdateTaskInput } from '@/lib/validation/schemas';
 import type { TaskDto } from '@/types/domain';
@@ -69,17 +70,43 @@ export const PATCH = withAuthedRoute<UpdateTaskInput, undefined, { task: TaskDto
       include: TASK_DETAIL_INCLUDE,
     });
 
+    // An UPSERT even when the edit completes the task: `taskEvent` returns
+    // null for a finished task, and the drain turns that into a delete. One
+    // operation, one place that decides what belongs on a calendar.
+    await syncToCalendar(db, {
+      userId: user.id,
+      entity: 'TASK',
+      entityId: task.id,
+      operation: 'UPSERT',
+      googleEventId: task.googleEventId,
+    });
+
     return { task: toTaskDto(task) };
   },
 });
 
 export const DELETE = withAuthedRoute<undefined, undefined, { id: string }>({
   rateLimit: 'mutation',
-  handler: async ({ params, db }) => {
+  handler: async ({ params, user, db }) => {
     const id = uuidSchema.parse(params.id);
 
-    const deleted = await db.task.deleteMany({ where: { id } });
-    if (deleted.count === 0) throw ApiError.notFound('کار موردنظر پیدا نشد.');
+    // Read before delete: the mirror id has to be captured while the row still
+    // exists, because the job that removes the event outlives the task.
+    const existing = await db.task.findUnique({
+      where: { id },
+      select: { googleEventId: true },
+    });
+    if (!existing) throw ApiError.notFound('کار موردنظر پیدا نشد.');
+
+    await db.task.deleteMany({ where: { id } });
+
+    await syncToCalendar(db, {
+      userId: user.id,
+      entity: 'TASK',
+      entityId: id,
+      operation: 'DELETE',
+      googleEventId: existing.googleEventId,
+    });
 
     return { id };
   },

@@ -1,6 +1,7 @@
 import { toCountdownDto } from '@/lib/api/dto';
 import { withAuthedRoute } from '@/lib/api/handler';
 import { toJalaliDayKey } from '@/lib/date/jalali';
+import { syncToCalendar } from '@/lib/google/auto-sync';
 import { ApiError } from '@/lib/errors';
 import { updateCountdownSchema, uuidSchema } from '@/lib/validation/schemas';
 import type { CountdownDto } from '@/types/domain';
@@ -42,6 +43,14 @@ export const PATCH = withAuthedRoute<UpdateCountdownInput, undefined, { countdow
       },
     });
 
+    await syncToCalendar(db, {
+      userId: user.id,
+      entity: 'COUNTDOWN',
+      entityId: event.id,
+      operation: 'UPSERT',
+      googleEventId: event.googleEventId,
+    });
+
     return {
       countdown: toCountdownDto(event, {
         timezone: user.timezone,
@@ -53,11 +62,26 @@ export const PATCH = withAuthedRoute<UpdateCountdownInput, undefined, { countdow
 
 export const DELETE = withAuthedRoute<undefined, undefined, { id: string }>({
   rateLimit: 'mutation',
-  handler: async ({ params, db }) => {
+  handler: async ({ params, user, db }) => {
     const id = uuidSchema.parse(params.id);
 
-    const deleted = await db.countdownEvent.deleteMany({ where: { id } });
-    if (deleted.count === 0) throw ApiError.notFound('رویداد موردنظر پیدا نشد.');
+    // The mirror id has to be read while the row is still there: the job that
+    // removes the event outlives the countdown it belonged to.
+    const existing = await db.countdownEvent.findUnique({
+      where: { id },
+      select: { googleEventId: true },
+    });
+    if (!existing) throw ApiError.notFound('رویداد موردنظر پیدا نشد.');
+
+    await db.countdownEvent.deleteMany({ where: { id } });
+
+    await syncToCalendar(db, {
+      userId: user.id,
+      entity: 'COUNTDOWN',
+      entityId: id,
+      operation: 'DELETE',
+      googleEventId: existing.googleEventId,
+    });
 
     return { id };
   },

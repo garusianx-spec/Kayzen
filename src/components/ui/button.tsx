@@ -1,6 +1,6 @@
 'use client';
 
-import { Slot } from '@radix-ui/react-slot';
+import { Slot, Slottable } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Loader2 } from 'lucide-react';
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
@@ -78,7 +78,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...props}
     >
       {isLoading ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null}
-      {children}
+      {/* `Slottable` rather than a bare `{children}`: with `asChild`, `Slot`
+          demands exactly one element child, and the spinner slot beside it —
+          even when it renders `null` — is a second one. Without this, every
+          `asChild` usage throws `React.Children.only`. */}
+      <Slottable>{children}</Slottable>
     </Component>
   );
 });

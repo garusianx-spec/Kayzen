@@ -61,9 +61,10 @@ Three rules earn their keep more than the rest:
 ├── vocabulary/                    daily words; + courses/, review, vault
 ├── notifications/                 history; + preferences, read
 ├── tools/weather                  province → city forecast, via Open-Meteo
+├── integrations/google            OAuth link, status, disconnect, force sync
 ├── pomodoro/ · preferences/ · push/subscribe
 ├── today                          the home screen's single snapshot query
-└── cron/                          reminders, streak reconciliation
+└── cron/                          reminders, streaks, calendar sync
 ```
 
 ## Data model
@@ -79,6 +80,10 @@ Fourteen models. The ones that carry the modules this document is about:
   they were given on a day; `VocabularyMastery` is what they know.
 - **`NotificationPreference`** and **`NotificationLog`** — one switch per
   category, and the history behind the bell.
+- **`GoogleAccount`** and **`CalendarSyncJob`** — one linked account per user
+  (tokens sealed with AES-GCM, never in a DTO) and the durable outbox that
+  carries Kayzen's changes to Google Calendar. `Task.googleEventId` and
+  `CountdownEvent.googleEventId` are the mirror ids.
 - **`ReadingPlan`**, **`UserBook`** and **`ReadingSession`** — how long you mean
   to read for and which half of the hub you are in; the shelf, tracked by page;
   and the sittings. `ReadingSession.bookId` is nullable so a summary and a novel
@@ -121,6 +126,46 @@ table — which is why the note flow has no third endpoint.
 Attachments are the one part of the app that is deliberately **not**
 offline-capable: a signed URL expires, so queueing an upload for replay hours
 later would fail anyway. The picker says so instead of failing silently.
+
+## Google Calendar
+
+One direction: Kayzen → Google. Tasks with a due date and countdowns become
+events in a **dedicated "Kayzen Planner" calendar**, provisioned on connect, so
+that a deleted task can never remove something the person put in their own
+calendar. Nothing is read back.
+
+Nothing in a request handler talks to Google. Every mutation writes a row to a
+durable outbox (`calendar_sync_jobs`) inside its own transaction, and the drain
+runs _after_ the response via Next's `after()`. Saving a task is therefore as
+fast and as reliable as Postgres, not as fast and as reliable as a third party.
+If the process dies before `after()` runs, the job is still in the database and
+`POST /api/v1/cron/calendar-sync` picks it up — that is the difference between
+an outbox and fire-and-forget.
+
+**The queue holds desired end state, not history.** One row per object, by
+unique constraint: five rapid edits of a task collapse into one job, and an
+UPSERT followed by a DELETE overwrites to DELETE. That is not an optimisation —
+it is what makes replaying the queue idempotent, which is what makes retrying
+safe. Failures back off 1 → 5 → 15 → 60 → 240 minutes and give up after six
+attempts, at which point the settings card asks the person to intervene.
+
+What belongs on a calendar is decided in one pure place
+(`src/lib/google/mapping.ts`), which is why it has tests. A task with no due
+date, or one that is completed or archived, maps to `null` — and the drain
+turns a `null` into a delete, so ticking a task off removes its event without
+any route needing to know that.
+
+The session cookie is `SameSite=Strict` and so is **not** sent on Google's
+inbound redirect. The callback therefore authenticates from a separate signed,
+`SameSite=Lax`, `HttpOnly` cookie carrying the user id, the `state` nonce and
+the PKCE verifier (`src/lib/google/link-state.ts`). Comparing that nonce with
+the one Google echoes back is what stops an attacker pasting their own
+authorization code into somebody else's browser.
+
+Refresh tokens are sealed with AES-256-GCM under their own key before they
+reach a column. A refresh token is a standing grant to somebody's calendar: a
+database dump that leaks one is worse than a dump that leaks a password hash,
+which at least has to be cracked first.
 
 ## Weather
 
@@ -180,6 +225,8 @@ src/app/
 │   │   │   ├── vault/
 │   │   │   │   └── page.tsx
 │   │   │   └── page.tsx
+│   │   ├── weather/
+│   │   │   └── page.tsx
 │   │   └── page.tsx
 │   ├── layout.tsx
 │   └── page.tsx
@@ -212,6 +259,8 @@ src/app/
 │       │   │   └── route.ts
 │       │   └── route.ts
 │       ├── cron/
+│       │   ├── calendar-sync/
+│       │   │   └── route.ts
 │       │   ├── reminders/
 │       │   │   └── route.ts
 │       │   └── streaks/
@@ -231,6 +280,15 @@ src/app/
 │       │   └── route.ts
 │       ├── health/
 │       │   └── route.ts
+│       ├── integrations/
+│       │   └── google/
+│       │       ├── callback/
+│       │       │   └── route.ts
+│       │       ├── start/
+│       │       │   └── route.ts
+│       │       ├── sync/
+│       │       │   └── route.ts
+│       │       └── route.ts
 │       ├── library/
 │       │   ├── [day]/
 │       │   │   ├── log/
@@ -361,6 +419,7 @@ src/components/
 │   ├── VocabularyVaultScreen.tsx
 │   └── WeatherScreen.tsx
 ├── settings/
+│   ├── GoogleCalendarCard.tsx
 │   └── PasswordCard.tsx
 ├── ui/
 │   ├── badge.tsx
@@ -408,6 +467,7 @@ src/lib/
 │   ├── phone.ts
 │   ├── session.ts
 │   └── tokens.ts
+├── crypto/
 ├── date/
 │   ├── digits.ts
 │   └── jalali.ts
@@ -432,6 +492,16 @@ src/lib/
 │   ├── streak-engine.ts
 │   ├── task-detail.ts
 │   └── vocabulary.ts
+├── google/
+│   ├── auto-sync.ts
+│   ├── calendar-api.ts
+│   ├── drain.ts
+│   ├── link-state.ts
+│   ├── mapping.ts
+│   ├── oauth.ts
+│   ├── secret-box.ts
+│   ├── sync-queue.ts
+│   └── tokens.ts
 ├── observability/
 │   └── sentry.ts
 ├── offline/

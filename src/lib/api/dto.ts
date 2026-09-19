@@ -1,5 +1,6 @@
 import type {
   Book365,
+  GoogleAccount,
   CountdownEvent,
   FinancialBox,
   FinancialTransaction,
@@ -33,6 +34,7 @@ import type {
   CountdownDto,
   FinancialBoxDto,
   FinancialTransactionDto,
+  GoogleLinkDto,
   HabitDto,
   NoteDto,
   PomodoroSessionDto,
@@ -313,6 +315,29 @@ export function toReadingLogDto(log: UserReadingLog): ReadingLogDto {
  * otherwise reach a picker that has no chip for it, leaving every chip
  * unselected and the reader unable to tell what their plan is.
  */
+/**
+ * The linked Google account, minus everything secret.
+ *
+ * `needsReauth` is derived rather than stored: the drain writes a message when
+ * a pass dies on the grant, and a message mentioning re-authorisation is the
+ * one class of failure the person can actually act on.
+ */
+export function toGoogleLinkDto(
+  account: Pick<GoogleAccount, 'email' | 'lastSyncedAt' | 'lastSyncError'>,
+  health: { pending: number; stalled: number },
+  configured: boolean,
+): GoogleLinkDto {
+  return {
+    configured,
+    connected: true,
+    email: account.email,
+    lastSyncedAt: account.lastSyncedAt?.toISOString() ?? null,
+    pending: health.pending,
+    stalled: health.stalled,
+    needsReauth: (account.lastSyncError ?? '').includes('re-authorisation required'),
+  };
+}
+
 export function toReadingPlanDto(plan: Pick<ReadingPlan, 'mode' | 'dailyMinutes'>): ReadingPlanDto {
   return {
     mode: plan.mode,

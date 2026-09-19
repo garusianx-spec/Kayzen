@@ -13,6 +13,7 @@ import type {
   CountdownDto,
   FinancialBoxDto,
   FinancialTransactionDto,
+  GoogleLinkDto,
   HabitDto,
   NoteDto,
   ReadingLogDto,
@@ -59,6 +60,7 @@ export const queryKeys = {
   notes: (search: string = '') => ['notes', search] as const,
   libraryToday: ['library', 'today'] as const,
   readingHub: ['library', 'hub'] as const,
+  googleLink: ['integrations', 'google'] as const,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -921,6 +923,44 @@ export function useLogReadingSession() {
       void queryClient.invalidateQueries({ queryKey: ['library'] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.today });
     },
+  });
+}
+
+/**
+ * The Google link's status.
+ *
+ * Polled while there is work outstanding and left alone when there is not: the
+ * queue drains itself after every mutation, so the only reason to ask again is
+ * to watch a backlog shrink. A fixed interval would be a request a minute,
+ * forever, to learn nothing.
+ */
+export function useGoogleLink(): UseQueryResult<GoogleLinkDto> {
+  return useQuery({
+    queryKey: queryKeys.googleLink,
+    queryFn: async () => {
+      const result = await api.get<{ link: GoogleLinkDto }>('/integrations/google');
+      return result.link;
+    },
+    staleTime: 30 * 1000,
+    refetchInterval: (query) => ((query.state.data?.pending ?? 0) > 0 ? 5_000 : false),
+  });
+}
+
+export function useForceGoogleSync() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.post<{ link: GoogleLinkDto }>('/integrations/google/sync', {}),
+    onSuccess: (result) => queryClient.setQueryData(queryKeys.googleLink, result.link),
+  });
+}
+
+export function useDisconnectGoogle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.delete<{ link: GoogleLinkDto }>('/integrations/google'),
+    onSuccess: (result) => queryClient.setQueryData(queryKeys.googleLink, result.link),
   });
 }
 

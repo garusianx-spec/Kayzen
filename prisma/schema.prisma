@@ -122,6 +122,26 @@ enum ReadingMode {
   @@map("reading_mode")
 }
 
+/// Which Kayzen object a calendar sync job is about.
+enum CalendarEntity {
+  TASK
+  COUNTDOWN
+
+  @@map("calendar_entity")
+}
+
+/// What the job should make true in Google Calendar.
+///
+/// Two operations, not four: a create and an update are the same request to
+/// the mirror (make the event match the row), which is what lets the queue
+/// collapse repeated edits into one job.
+enum CalendarOperation {
+  UPSERT
+  DELETE
+
+  @@map("calendar_operation")
+}
+
 enum NotificationCategory {
   TASK_REMINDER
   HABIT_PROMPT
@@ -199,6 +219,8 @@ model User {
   readingPlan       ReadingPlan?
   books             UserBook[]
   readingSessions   ReadingSession[]
+  googleAccount     GoogleAccount?
+  calendarSyncJobs  CalendarSyncJob[]
 
   @@index([phone])
   @@map("users")
@@ -306,6 +328,10 @@ model Task {
   /// When to fire the reminder. Null means the due date carries no alarm.
   remindAt           DateTime?      @map("remind_at") @db.Timestamptz(6)
   categoryId         String?        @map("category_id") @db.Uuid
+  /// The event in the user's "Kayzen Planner" calendar that mirrors this task,
+  /// or null when it has never been pushed. Google owns the id; we only store
+  /// it so a later edit patches the same event instead of making a second one.
+  googleEventId      String?        @map("google_event_id") @db.VarChar(1024)
   completedAt        DateTime?      @map("completed_at") @db.Timestamptz(6)
   createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -500,6 +526,8 @@ model CountdownEvent {
   colorToken          String   @default("violet") @map("color_token")
   icon                String   @default("calendar-heart")
   notifyBeforeMinutes Int[]    @default([1440, 60]) @map("notify_before_minutes")
+  /// Mirror event in "Kayzen Planner"; see `Task.googleEventId`.
+  googleEventId       String?  @map("google_event_id") @db.VarChar(1024)
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -654,6 +682,85 @@ model ReadingSession {
   @@index([userId, dayKey])
   @@index([bookId])
   @@map("reading_sessions")
+}
+
+/// --------------------------------------------------------------------------
+/// Google Calendar
+/// --------------------------------------------------------------------------
+
+/// One linked Google account per Kayzen account.
+///
+/// The tokens are sealed with AES-GCM before they are stored (see
+/// `src/lib/google/tokens.ts`), because a refresh token is a standing grant to
+/// somebody's calendar: a database dump that leaks one is worse than a dump
+/// that leaks a password hash, which at least has to be cracked first.
+model GoogleAccount {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @map("user_id") @db.Uuid
+
+  /// Google's stable subject id. An email can change hands; this cannot.
+  googleSub String @unique @map("google_sub") @db.VarChar(64)
+  email     String @db.VarChar(320)
+
+  /// Sealed. Never in a DTO, never in a log, never sent to the client.
+  refreshToken         String    @map("refresh_token")
+  /// Sealed too — it is a bearer token for an hour, which is long enough.
+  accessToken          String?   @map("access_token")
+  accessTokenExpiresAt DateTime? @map("access_token_expires_at") @db.Timestamptz(6)
+
+  /// The scopes Google actually granted, which can be fewer than we asked for.
+  scope String
+
+  /// The dedicated "Kayzen Planner" secondary calendar, provisioned on connect
+  /// so that a deleted task never removes something the person put there
+  /// themselves.
+  calendarId String? @map("calendar_id") @db.VarChar(200)
+
+  lastSyncedAt  DateTime? @map("last_synced_at") @db.Timestamptz(6)
+  lastSyncError String?   @map("last_sync_error")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_accounts")
+}
+
+/// The durable outbox for calendar mutations.
+///
+/// One row per *object*, not per edit: the unique constraint collapses five
+/// rapid edits of the same task into one job, because the queue holds the
+/// desired end state rather than a log of how it got there. An UPSERT followed
+/// by a DELETE overwrites to DELETE for the same reason.
+///
+/// `googleEventId` is carried on the job because a DELETE outlives its row —
+/// by the time the drain runs, the task it refers to is gone.
+model CalendarSyncJob {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId    String            @map("user_id") @db.Uuid
+  entity    CalendarEntity
+  entityId  String            @map("entity_id") @db.Uuid
+  operation CalendarOperation
+
+  googleEventId String? @map("google_event_id") @db.VarChar(1024)
+
+  attempts  Int      @default(0)
+  /// Exponential backoff lives here rather than in a scheduler: the drain
+  /// simply refuses to claim a job before this instant.
+  runAfter  DateTime @default(now()) @map("run_after") @db.Timestamptz(6)
+  lastError String?  @map("last_error")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entity, entityId])
+  @@index([userId, runAfter])
+  @@map("calendar_sync_jobs")
 }
 
 // ---------------------------------------------------------------------------

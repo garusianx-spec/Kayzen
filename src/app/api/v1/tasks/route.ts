@@ -4,6 +4,7 @@ import { toTaskDto } from '@/lib/api/dto';
 import { TASK_DETAIL_INCLUDE, checklistWrite } from '@/lib/domain/task-detail';
 import { withAuthedRoute } from '@/lib/api/handler';
 import { toJalaliDayKey } from '@/lib/date/jalali';
+import { syncToCalendar } from '@/lib/google/auto-sync';
 import {
   createTaskSchema,
   listTasksSchema,
@@ -96,6 +97,15 @@ export const POST = withAuthedRoute<CreateTaskInput, undefined, { task: TaskDto 
           : {}),
       },
       include: TASK_DETAIL_INCLUDE,
+    });
+
+    // Enqueued inside the request's transaction so the intent commits with the
+    // task; pushed to Google after the response, so saving stays fast.
+    await syncToCalendar(db, {
+      userId: user.id,
+      entity: 'TASK',
+      entityId: task.id,
+      operation: 'UPSERT',
     });
 
     return { task: toTaskDto(task) };

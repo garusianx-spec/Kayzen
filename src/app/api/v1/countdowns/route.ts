@@ -1,6 +1,7 @@
 import { toCountdownDto } from '@/lib/api/dto';
 import { withAuthedRoute } from '@/lib/api/handler';
 import { toJalaliDayKey } from '@/lib/date/jalali';
+import { syncToCalendar } from '@/lib/google/auto-sync';
 import { createCountdownSchema, type CreateCountdownInput } from '@/lib/validation/schemas';
 import type { CountdownDto } from '@/types/domain';
 
@@ -45,6 +46,13 @@ export const POST = withAuthedRoute<CreateCountdownInput, undefined, { countdown
         icon: body.icon,
         notifyBeforeMinutes: body.notifyBeforeMinutes,
       },
+    });
+
+    await syncToCalendar(db, {
+      userId: user.id,
+      entity: 'COUNTDOWN',
+      entityId: event.id,
+      operation: 'UPSERT',
     });
 
     return {

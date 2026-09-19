@@ -2,6 +2,7 @@ import { toTaskDto } from '@/lib/api/dto';
 import { withAuthedRoute } from '@/lib/api/handler';
 import { toJalaliDayKey } from '@/lib/date/jalali';
 import { pointsForTask } from '@/lib/domain/points';
+import { syncToCalendar } from '@/lib/google/auto-sync';
 import { nextOccurrence, parseRecurrence } from '@/lib/domain/recurrence';
 import { ApiError } from '@/lib/errors';
 import { uuidSchema } from '@/lib/validation/schemas';
@@ -91,6 +92,26 @@ export const POST = withAuthedRoute<undefined, undefined, CompleteResponse>({
       data: { points: { increment: pointsAwarded } },
     });
 
+    // Ticking a task off removes it from the calendar (`taskEvent` returns
+    // null for a completed task) and puts the next instance of a recurring
+    // one there instead. Both are ordinary upserts; the mapping decides.
+    await syncToCalendar(db, {
+      userId: user.id,
+      entity: 'TASK',
+      entityId: task.id,
+      operation: 'UPSERT',
+      googleEventId: task.googleEventId,
+    });
+
+    if (nextTask) {
+      await syncToCalendar(db, {
+        userId: user.id,
+        entity: 'TASK',
+        entityId: nextTask.id,
+        operation: 'UPSERT',
+      });
+    }
+
     return {
       task: toTaskDto(task, now),
       nextTask: nextTask ? toTaskDto(nextTask, now) : null,
@@ -144,6 +165,16 @@ export const DELETE = withAuthedRoute<undefined, undefined, CompleteResponse>({
     if (account.points < 0) {
       await db.user.update({ where: { id: user.id }, data: { points: 0 } });
     }
+
+    // Un-ticking puts the task back on the calendar, for the same reason
+    // ticking it took it off: the mirror shows what is still owed.
+    await syncToCalendar(db, {
+      userId: user.id,
+      entity: 'TASK',
+      entityId: task.id,
+      operation: 'UPSERT',
+      googleEventId: task.googleEventId,
+    });
 
     return { task: toTaskDto(task), nextTask: null, pointsAwarded: -refund, totalPoints };
   },
